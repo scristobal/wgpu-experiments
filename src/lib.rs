@@ -6,10 +6,10 @@ use winit::{
     window::WindowBuilder,
 };
 
-#[cfg_attr(target_family = "wasm", wasm_bindgen(start))]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub fn run() {
     cfg_if::cfg_if! {
-        if #[cfg(target_family = "wasm")] {
+        if #[cfg(target_arch = "wasm32")] {
             std::panic::set_hook(Box::new(console_error_panic_hook::hook));
             console_log::init_with_level(log::Level::Warn).expect("Couldn't initialize logger");
         } else {
@@ -17,11 +17,10 @@ pub fn run() {
         }
     }
 
-
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
-    #[cfg(target_family = "wasm")]
+    #[cfg(target_arch = "wasm32")]
     {
         // Winit prevents sizing with CSS`dd
         use winit::dpi::PhysicalSize;
@@ -44,16 +43,6 @@ pub fn run() {
     });
 
     let surface = unsafe { instance.create_surface(&window) }.unwrap();
-
-
-    log::warn!(
-        "{:?}",
-        &wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::default(),
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        }
-    );
 
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::default(),

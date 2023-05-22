@@ -18,12 +18,9 @@ log = "0.4"
 pollster = "0.3"
 
 
-
-[target.'cfg(target_family = "wasm")'.dependencies]
+[target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.6"
 console_log = "1.0.0"
-wgpu = { version= "0.16", features = ["webgl"]}
-# winit = { version = "0.28", features = ["web-sys"] }
 wasm-bindgen = "0.2.86"
 wasm-bindgen-futures = "0.4.30"
 web-sys = { version = "0.3.63", features = [
@@ -154,3 +151,11 @@ web-sys = { version = "0.3.63", features = [
     # "GpuVertexState",
 ]}
 js-sys = "0.3.63"
+
+
+[profile.release]
+opt-level = 'z'     # Optimize for size
+lto = true          # Enable link-time optimization
+codegen-units = 1   # Reduce number of codegen units to increase optimizations
+panic = 'abort'     # Abort on panic
+strip = true        # Strip symbols from binary*
