@@ -1,5 +1,5 @@
-use wgpu_intro::run;
+use wgpu_intro::start;
 
 fn main() {
-    run()
+    start()
 }
