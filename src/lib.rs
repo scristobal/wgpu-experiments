@@ -6,59 +6,178 @@ use winit::{
     window::Window,
 };
 
-async fn run(event_loop: EventLoop<()>, window: Window) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        // Winit prevents sizing with CSS`dd
-        use winit::dpi::PhysicalSize;
-        window.set_inner_size(PhysicalSize::new(512, 512));
+struct State {
+    surface: wgpu::Surface,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
+    size: winit::dpi::PhysicalSize<u32>,
+    window: Window,
+    clear_color: wgpu::Color,
+}
 
-        use winit::platform::web::WindowExtWebSys;
+impl State {
+    async fn new(window: Window) -> Self {
+        #[cfg(target_arch = "wasm32")]
+        {
+            // Winit prevents sizing with CSS`dd
+            use winit::dpi::PhysicalSize;
+            window.set_inner_size(PhysicalSize::new(512, 512));
 
-        let canvas = window.canvas();
+            use winit::platform::web::WindowExtWebSys;
 
-        let window = web_sys::window().unwrap();
-        let document = window.document().unwrap();
-        let body = document.body().unwrap();
+            let canvas = window.canvas();
 
-        body.append_child(&canvas).unwrap();
+            let window = web_sys::window().unwrap();
+            let document = window.document().unwrap();
+            let body = document.body().unwrap();
+
+            body.append_child(&canvas).unwrap();
+        }
+
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            dx12_shader_compiler: Default::default(),
+        });
+
+        let surface = unsafe { instance.create_surface(&window) }.unwrap();
+
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            })
+            .await
+            .unwrap();
+
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: None,
+                    features: wgpu::Features::empty(),
+                    /*
+                     *
+                     * When using "webgl" feature of wgpu need to set limits:
+                     *
+                     * ```
+                     *   limits: if cfg!(target_arch = "wasm32") {
+                     *     wgpu::Limits::downlevel_webgl2_defaults()
+                     *   } else {
+                     *     wgpu::Limits::default()
+                     *   }
+                     * ```
+                     */
+                    limits: wgpu::Limits::default(),
+                },
+                None, // Trace path
+            )
+            .await
+            .unwrap();
+
+        let size = window.inner_size();
+
+        /*
+         * using defaults here but there is a much involved example at
+         * https://sotrh.github.io/learn-wgpu/beginner/tutorial2-surface/#state-new
+         */
+        let config = surface
+            .get_default_config(&adapter, size.width, size.height)
+            .unwrap();
+
+        surface.configure(&device, &config);
+
+        let clear_color = wgpu::Color::BLACK;
+
+        Self {
+            surface,
+            device,
+            queue,
+            config,
+            size,
+            window,
+            clear_color,
+        }
     }
 
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
-        dx12_shader_compiler: Default::default(),
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        if new_size.width > 0 && new_size.height > 0 {
+            self.size = new_size;
+            self.config.width = new_size.width;
+            self.config.height = new_size.height;
+            self.surface.configure(&self.device, &self.config);
+        }
+    }
+
+    fn input(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                self.clear_color = wgpu::Color {
+                    r: position.x / self.size.width as f64,
+                    g: position.y / self.size.height as f64,
+                    b: 1.0,
+                    a: 1.0,
+                };
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn update(&mut self) {}
+
+    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        let output = self.surface.get_current_texture().unwrap();
+
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+        let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(self.clear_color),
+                    store: true,
+                },
+            })],
+            depth_stencil_attachment: None,
+        });
+
+        drop(render_pass);
+
+        let command_buffer = encoder.finish();
+
+        self.queue.submit([command_buffer]);
+
+        output.present();
+
+        Ok(())
+    }
+}
+
+async fn run(event_loop: EventLoop<()>, window: Window) {
+    let mut state = State::new(window).await;
+
+    let grid_size_x: u32 = 64;
+    let grid_size_y: u32 = 64;
+
+    let grid_size = vec![grid_size_x, grid_size_y];
+
+    state.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Grid uniform buffer"),
+        size: grid_size.len() as u64 * std::mem::size_of::<u32>() as u64,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
     });
-
-    let surface = unsafe { instance.create_surface(&window) }.unwrap();
-
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::default(),
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        })
-        .await
-        .unwrap();
-
-    let (device, queue) = adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                label: None,
-                features: wgpu::Features::empty(),
-                limits: wgpu::Limits::default(),
-            },
-            None, // Trace path
-        )
-        .await
-        .unwrap();
-
-    let size = window.inner_size();
-    surface.configure(
-        &device,
-        &surface
-            .get_default_config(&adapter, size.width, size.height)
-            .unwrap(),
-    );
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -67,7 +186,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == window.id() => match event {
+            } if window_id == state.window.id() && !state.input(event) => match event {
                 WindowEvent::CloseRequested
                 | WindowEvent::KeyboardInput {
                     input:
@@ -78,42 +197,27 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                         },
                     ..
                 } => *control_flow = ControlFlow::Exit,
+                WindowEvent::Resized(physical_size) => {
+                    state.resize(*physical_size);
+                }
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    state.resize(**new_inner_size);
+                }
                 _ => {}
             },
-            Event::RedrawRequested(_) => {
-                let output = surface.get_current_texture().unwrap();
 
-                let view = output
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Render Encoder"),
-                });
-
-                {
-                    let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("Render Pass"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::default(),
-                                store: true,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                    });
+            Event::RedrawRequested(window_id) if window_id == state.window.id() => {
+                state.update();
+                match state.render() {
+                    Ok(_) => {}
+                    Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                    Err(e) => eprintln!("{:?}", e),
                 }
-
-                let command_buffer = encoder.finish();
-
-                queue.submit([command_buffer]);
-
-                output.present();
             }
+
             Event::MainEventsCleared => {
-                window.request_redraw();
+                state.window.request_redraw();
             }
             _ => (),
         }
