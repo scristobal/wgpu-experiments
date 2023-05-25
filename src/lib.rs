@@ -12,29 +12,21 @@ use winit::{
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
     position: [f32; 3],
-    color: [f32; 3],
+    tex_coords: [f32; 2],
 }
 
 impl Vertex {
-    /**
-    Alternative implementation w/ macros:
-
-    ```
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        use std::mem;
-
-        const ATTRIBUTES: [wgpu::VertexAttribute; 2] =
-            wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
-
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &Self::ATTRIBUTES,
-        }
-    }
-    ```
-    */
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        /*
+        Alternative implementation w/ macros:
+            use std::mem;
+            const ATTRIBUTES: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
+            wgpu::VertexBufferLayout {
+                array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &Self::ATTRIBUTES,
+            }
+        */
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -47,7 +39,7 @@ impl Vertex {
                 wgpu::VertexAttribute {
                     offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x3,
+                    format: wgpu::VertexFormat::Float32x2,
                 },
             ],
         }
@@ -60,28 +52,24 @@ note orders in `VERTICES` are counter-clock-wise because we used
 */
 const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [-0.0868241, 0.49240386, 0.0],
-        color: [0.5, 0.0, 0.5],
-    }, // A
+        position: [-0.8, 0.8, 0.0],
+        tex_coords: [0.0, 0.0],
+    }, // 0
     Vertex {
-        position: [-0.49513406, 0.06958647, 0.0],
-        color: [0.5, 0.0, 0.5],
-    }, // B
+        position: [0.8, 0.8, 0.0],
+        tex_coords: [1.0, 0.0],
+    }, // 1
     Vertex {
-        position: [-0.21918549, -0.44939706, 0.0],
-        color: [0.5, 0.0, 0.5],
-    }, // C
+        position: [0.8, -0.8, 0.0],
+        tex_coords: [1.0, 1.0],
+    }, // 2
     Vertex {
-        position: [0.35966998, -0.3473291, 0.0],
-        color: [0.5, 0.0, 0.5],
-    }, // D
-    Vertex {
-        position: [0.44147372, 0.2347359, 0.0],
-        color: [0.5, 0.0, 0.5],
-    }, // E
+        position: [-0.8, -0.8, 0.0],
+        tex_coords: [0.0, 1.0],
+    }, // 3
 ];
 
-const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
+const INDICES: &[u16] = &[0, 3, 1, 1, 3, 2];
 
 struct State {
     surface: wgpu::Surface,
@@ -139,15 +127,8 @@ impl State {
                     label: None,
                     features: wgpu::Features::empty(),
                     /**
-                    When using "webgl" feature of wgpu need to set limits:
-
-                    ```
-                    limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::default()
-                    }
-                    ```
+                    When using "webgl" feature of wgpu need to set limits to
+                    `wgpu::Limits::downlevel_webgl2_defaults()`
                     */
                     limits: wgpu::Limits::default(),
                 },
@@ -158,13 +139,29 @@ impl State {
 
         let size = window.inner_size();
 
+        let surface_caps = surface.get_capabilities(&adapter);
+
+        let surface_format = surface_caps.formats[0];
+        // .iter()
+        // .copied()
+        // .find(|f| f == &wgpu::TextureFormat::Rgba8UnormSrgb)
+        // .unwrap();
+
         /*
-         * using defaults here but there is a much involved example at
-         * https://sotrh.github.io/learn-wgpu/beginner/tutorial2-surface/#state-new
-         */
+        could also use defaults:
         let config = surface
             .get_default_config(&adapter, size.width, size.height)
             .unwrap();
+         */
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width: size.width,
+            height: size.height,
+            present_mode: surface_caps.present_modes[0],
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+        };
 
         surface.configure(&device, &config);
 
@@ -172,11 +169,11 @@ impl State {
         let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
         let diffuse_rgba = diffuse_image.as_rgba8().unwrap();
 
-        let dimensions = diffuse_image.dimensions();
+        let (image_width, image_height) = diffuse_image.dimensions();
 
         let texture_size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
+            width: image_width,
+            height: image_height,
             depth_or_array_layers: 1,
         };
 
@@ -186,8 +183,8 @@ impl State {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_DST,
+            format: surface_format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
 
@@ -201,8 +198,8 @@ impl State {
             diffuse_rgba,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * dimensions.0).map(|v| v.get()),
-                rows_per_image: std::num::NonZeroU32::new(dimensions.1).map(|v| v.get()),
+                bytes_per_row: Some(4 * image_width),
+                rows_per_image: Some(image_height),
             },
             texture_size,
         );
@@ -211,9 +208,9 @@ impl State {
             diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::FilterMode::Nearest,
@@ -468,18 +465,20 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub fn start() {
+    cfg_if::cfg_if! {
+        if #[cfg(target_arch = "wasm32")]{
+            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+            console_log::init().expect("could not initialize logger");
+        } else {
+            env_logger::init();
+        }
+    }
+
     let event_loop = EventLoop::new();
     let window = winit::window::Window::new(&event_loop).unwrap();
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        env_logger::init();
-        pollster::block_on(run(event_loop, window));
-    }
+
     #[cfg(target_arch = "wasm32")]
     {
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-        console_log::init().expect("could not initialize logger");
-
         use winit::platform::web::WindowExtWebSys;
         // On wasm, append the canvas to the document body
         web_sys::window()
@@ -490,6 +489,13 @@ pub fn start() {
                     .ok()
             })
             .expect("couldn't append canvas to document body");
-        wasm_bindgen_futures::spawn_local(run(event_loop, window));
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(target_arch = "wasm32")]{
+            wasm_bindgen_futures::spawn_local(run(event_loop, window));
+        } else {
+            pollster::block_on(run(event_loop, window));
+        }
     }
 }
