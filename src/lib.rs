@@ -1,10 +1,13 @@
 mod camera;
 mod geometry;
+mod instances;
 mod texture;
 
+use instances::InstanceRaw;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
-use wgpu::util::DeviceExt;
+
+use wgpu::util::{DeviceExt, RenderEncoder};
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -23,12 +26,13 @@ struct State {
     index_buffer: wgpu::Buffer,
     num_indices: u32,
     diffuse_bind_group: wgpu::BindGroup,
-    diffuse_texture: texture::Texture,
     camera: camera::Camera,
     camera_uniform: camera::CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
     camera_controller: camera::CameraController,
+    instance_buffer: wgpu::Buffer,
+    num_instances: u32,
 }
 
 impl State {
@@ -203,7 +207,7 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[geometry::Vertex::desc()],
+                buffers: &[geometry::Vertex::desc(), InstanceRaw::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -238,6 +242,16 @@ impl State {
             num_indices,
         } = geometry::Buffers::new(&device);
 
+        let instance_data = instances::new();
+
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("instance_buffer"),
+            contents: bytemuck::cast_slice(&instance_data),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let num_instances = instance_data.len() as _;
+
         Self {
             surface,
             device,
@@ -250,12 +264,13 @@ impl State {
             index_buffer,
             num_indices,
             diffuse_bind_group,
-            diffuse_texture,
             camera,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
             camera_controller,
+            instance_buffer,
+            num_instances,
         }
     }
 
@@ -314,8 +329,9 @@ impl State {
         render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
 
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-        render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+        render_pass.draw_indexed(0..self.num_indices, 0, 0..self.num_instances);
 
         drop(render_pass);
 
