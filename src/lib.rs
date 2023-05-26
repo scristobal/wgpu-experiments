@@ -1,4 +1,4 @@
-mod geometries;
+mod geometry;
 mod texture;
 
 #[cfg(target_arch = "wasm32")]
@@ -160,7 +160,7 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[geometries::Vertex::desc()],
+                buffers: &[geometry::Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -189,11 +189,11 @@ impl State {
             multiview: None,
         });
 
-        let geometries::Vertices {
+        let geometry::Vertices {
             vertex_buffer,
             index_buffer,
             num_indices,
-        } = geometries::Vertices::new(&device);
+        } = geometry::Vertices::new(&device);
 
         Self {
             surface,
