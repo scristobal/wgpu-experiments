@@ -1,75 +1,13 @@
-use image::GenericImageView;
+mod geometries;
+mod texture;
+
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
-use wgpu::util::DeviceExt;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 3],
-    tex_coords: [f32; 2],
-}
-
-impl Vertex {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        /*
-        Alternative implementation w/ macros:
-            use std::mem;
-            const ATTRIBUTES: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
-            wgpu::VertexBufferLayout {
-                array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &Self::ATTRIBUTES,
-            }
-        */
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
-
-/**
-note orders in `VERTICES` are counter-clock-wise because we used
-`wgpu::FrontFace:CCw` in the `render_pipeline`
-*/
-const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-0.8, 0.8, 0.0],
-        tex_coords: [0.0, 0.0],
-    }, // 0
-    Vertex {
-        position: [0.8, 0.8, 0.0],
-        tex_coords: [1.0, 0.0],
-    }, // 1
-    Vertex {
-        position: [0.8, -0.8, 0.0],
-        tex_coords: [1.0, 1.0],
-    }, // 2
-    Vertex {
-        position: [-0.8, -0.8, 0.0],
-        tex_coords: [0.0, 1.0],
-    }, // 3
-];
-
-const INDICES: &[u16] = &[0, 3, 1, 1, 3, 2];
 
 struct State {
     surface: wgpu::Surface,
@@ -78,12 +16,12 @@ struct State {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     window: Window,
-    clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
     diffuse_bind_group: wgpu::BindGroup,
+    diffuse_texture: texture::Texture,
 }
 
 impl State {
@@ -165,57 +103,9 @@ impl State {
 
         surface.configure(&device, &config);
 
-        let diffuse_bytes = include_bytes!("image-1x.png");
-        let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
-        let diffuse_rgba = diffuse_image.as_rgba8().unwrap();
-
-        let (image_width, image_height) = diffuse_image.dimensions();
-
-        let texture_size = wgpu::Extent3d {
-            width: image_width,
-            height: image_height,
-            depth_or_array_layers: 1,
-        };
-
-        let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("diffuse_texture"),
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: surface_format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &diffuse_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            diffuse_rgba,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * image_width),
-                rows_per_image: Some(image_height),
-            },
-            texture_size,
-        );
-
-        let diffuse_texture_view =
-            diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::Repeat,
-            address_mode_v: wgpu::AddressMode::Repeat,
-            address_mode_w: wgpu::AddressMode::Repeat,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
+        let diffuse_bytes = include_bytes!("image-1x.png"); // CHANGED!
+        let diffuse_texture =
+            texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "image-1x.png").unwrap(); // CHANGED!
 
         let texture_bind_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -246,16 +136,14 @@ impl State {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
                 },
             ],
         });
-
-        let clear_color = wgpu::Color::BLACK;
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
@@ -272,7 +160,7 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[Vertex::desc()],
+                buffers: &[geometries::Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -301,19 +189,11 @@ impl State {
             multiview: None,
         });
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(INDICES),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        let num_indices = INDICES.len() as u32;
+        let geometries::Vertices {
+            vertex_buffer,
+            index_buffer,
+            num_indices,
+        } = geometries::Vertices::new(&device);
 
         Self {
             surface,
@@ -322,12 +202,12 @@ impl State {
             config,
             size,
             window,
-            clear_color,
             render_pipeline,
             vertex_buffer,
             index_buffer,
             num_indices,
             diffuse_bind_group,
+            diffuse_texture,
         }
     }
 
@@ -340,19 +220,8 @@ impl State {
         }
     }
 
-    fn input(&mut self, event: &WindowEvent) -> bool {
-        match event {
-            WindowEvent::CursorMoved { position, .. } => {
-                self.clear_color = wgpu::Color {
-                    r: position.x / self.size.width as f64,
-                    g: position.y / self.size.height as f64,
-                    b: 1.0,
-                    a: 1.0,
-                };
-                true
-            }
-            _ => false,
-        }
+    fn input(&mut self, _event: &WindowEvent) -> bool {
+        false
     }
 
     fn update(&mut self) {}
@@ -376,7 +245,7 @@ impl State {
                 view: &view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(self.clear_color),
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                     store: true,
                 },
             })],
@@ -386,9 +255,10 @@ impl State {
         render_pass.set_pipeline(&self.render_pipeline);
 
         render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
 
         drop(render_pass);
