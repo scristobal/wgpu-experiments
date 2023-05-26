@@ -7,7 +7,7 @@ use instances::InstanceRaw;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-use wgpu::util::{DeviceExt, RenderEncoder};
+use wgpu::util::DeviceExt;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -214,7 +214,14 @@ impl State {
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent::OVER,
+                    }),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -361,7 +368,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        // *control_flow = ControlFlow::Wait;
 
         match event {
             Event::WindowEvent {
@@ -393,7 +400,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    Err(e) => eprintln!("{:?}", e),
+                    Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
+                    Err(wgpu::SurfaceError::Outdated) => log::warn!("Surface outdated"),
                 }
             }
 

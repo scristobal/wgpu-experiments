@@ -27,7 +27,7 @@ impl Camera {
             aspect: width / height,
             fovy: 45.0,
             znear: 0.1,
-            zfar: 100.0,
+            zfar: 500.0,
         }
     }
 
@@ -119,8 +119,6 @@ impl CameraController {
         let forward_norm = forward.normalize();
         let forward_mag = forward.magnitude();
 
-        // Prevents glitching when camera gets too close to the
-        // center of the scene.
         if self.is_forward_pressed && forward_mag > self.speed {
             camera.eye += forward_norm * self.speed;
         }

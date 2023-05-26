@@ -1,9 +1,4 @@
 use cgmath::prelude::*;
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct InstanceRaw {
-    model: [[f32; 4]; 4],
-}
 
 pub struct Instance {
     position: cgmath::Vector3<f32>,
@@ -18,6 +13,12 @@ impl Instance {
             .into(),
         }
     }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct InstanceRaw {
+    model: [[f32; 4]; 4],
 }
 
 impl InstanceRaw {
@@ -61,7 +62,7 @@ impl InstanceRaw {
 }
 
 pub fn new() -> Vec<InstanceRaw> {
-    const NUM_INSTANCES_PER_ROW: u32 = 10;
+    const NUM_INSTANCES_PER_ROW: u32 = 50;
     const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
         NUM_INSTANCES_PER_ROW as f32 * 0.5,
         0.0,
@@ -73,7 +74,7 @@ pub fn new() -> Vec<InstanceRaw> {
             (0..NUM_INSTANCES_PER_ROW).map(move |x| {
                 let position = cgmath::Vector3 {
                     x: x as f32,
-                    y: 0.0,
+                    y: x as f32 / z as f32,
                     z: z as f32,
                 } - INSTANCE_DISPLACEMENT;
 
