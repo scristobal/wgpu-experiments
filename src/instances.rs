@@ -68,9 +68,9 @@ impl InstanceBuffer {
             .flat_map(|z| {
                 (0..cols).map(move |x| {
                     let position = cgmath::Vector3 {
-                        x: x as f32 - (cols as f32 * 0.5),
+                        x: 2.0 * x as f32 - (2.0 * cols as f32 * 0.5),
                         y: 0.0,
-                        z: z as f32 - (rows as f32 * 0.5),
+                        z: 2.0 * z as f32 - (2.0 * rows as f32 * 0.5),
                     };
 
                     let rotation = if position.is_zero() {
