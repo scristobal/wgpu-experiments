@@ -3,7 +3,7 @@ mod geometry;
 mod instances;
 mod texture;
 
-use instances::InstanceRaw;
+use instances::RawInstance;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -114,9 +114,14 @@ impl State {
 
         surface.configure(&device, &config);
 
-        let diffuse_bytes = include_bytes!("image-1x.png"); // CHANGED!
+        /*
+         *
+         * TEXTURE RELATED STUFF
+         *
+         */
+        let diffuse_bytes = include_bytes!("image-1x.png");
         let diffuse_texture =
-            texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "image-1x.png").unwrap(); // CHANGED!
+            texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "image-1x.png").unwrap();
 
         let texture_bind_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -156,6 +161,11 @@ impl State {
             ],
         });
 
+        /*
+         *
+         * CAMERA RELATED STUFF
+         *
+         */
         let camera = camera::Camera::new(config.width as f32, config.height as f32);
         let camera_controller = camera::CameraController::new(0.2);
 
@@ -192,6 +202,11 @@ impl State {
             }],
         });
 
+        /*
+         *
+         * RENDER AND PIPELINE STUFF
+         *
+         */
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
@@ -207,7 +222,7 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[geometry::Vertex::desc(), InstanceRaw::desc()],
+                buffers: &[geometry::Vertex::desc(), RawInstance::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -243,21 +258,22 @@ impl State {
             multiview: None,
         });
 
-        let geometry::Buffers {
+        /*
+         *
+         * VERTEX SHADER BUFFERS: vertices and instantiation
+         *
+         */
+
+        let geometry::GeometryBuffers {
             vertex_buffer,
             index_buffer,
             num_indices,
-        } = geometry::Buffers::new(&device);
+        } = geometry::GeometryBuffers::new(&device);
 
-        let instance_data = instances::new();
-
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("instance_buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let num_instances = instance_data.len() as _;
+        let instances::InstanceBuffer {
+            instance_buffer,
+            num_instances,
+        } = instances::InstanceBuffer::new(&device, 10, 10);
 
         Self {
             surface,
@@ -266,9 +282,6 @@ impl State {
             config,
             size,
             window,
-            render_pipeline,
-            vertex_buffer,
-            index_buffer,
             num_indices,
             diffuse_bind_group,
             camera,
@@ -276,8 +289,11 @@ impl State {
             camera_buffer,
             camera_bind_group,
             camera_controller,
+            vertex_buffer,
+            index_buffer,
             instance_buffer,
             num_instances,
+            render_pipeline,
         }
     }
 
@@ -355,61 +371,45 @@ impl State {
 async fn run(event_loop: EventLoop<()>, window: Window) {
     let mut state = State::new(window).await;
 
-    let grid_size_x: u32 = 64;
-    let grid_size_y: u32 = 64;
-
-    let grid_size = vec![grid_size_x, grid_size_y];
-
-    state.device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Grid uniform buffer"),
-        size: grid_size.len() as u64 * std::mem::size_of::<u32>() as u64,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    event_loop.run(move |event, _, control_flow| {
-        // *control_flow = ControlFlow::Wait;
-
-        match event {
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == state.window.id() && !state.input(event) => match event {
-                WindowEvent::CloseRequested
-                | WindowEvent::KeyboardInput {
-                    input:
-                        KeyboardInput {
-                            state: ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::Escape),
-                            ..
-                        },
-                    ..
-                } => *control_flow = ControlFlow::Exit,
-                WindowEvent::Resized(physical_size) => {
-                    state.resize(*physical_size);
-                }
-                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                    state.resize(**new_inner_size);
-                }
-                _ => {}
-            },
-
-            Event::RedrawRequested(window_id) if window_id == state.window.id() => {
-                state.update();
-                match state.render() {
-                    Ok(_) => {}
-                    Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
-                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
-                    Err(wgpu::SurfaceError::Outdated) => log::warn!("Surface outdated"),
-                }
+    event_loop.run(move |event, _, control_flow| match event {
+        Event::WindowEvent {
+            ref event,
+            window_id,
+        } if window_id == state.window.id() && !state.input(event) => match event {
+            WindowEvent::CloseRequested
+            | WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                        ..
+                    },
+                ..
+            } => *control_flow = ControlFlow::Exit,
+            WindowEvent::Resized(physical_size) => {
+                state.resize(*physical_size);
             }
-
-            Event::MainEventsCleared => {
-                state.window.request_redraw();
+            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                state.resize(**new_inner_size);
             }
-            _ => (),
+            _ => {}
+        },
+
+        Event::RedrawRequested(window_id) if window_id == state.window.id() => {
+            state.update();
+            match state.render() {
+                Ok(_) => {}
+                Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+                Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
+                Err(wgpu::SurfaceError::Outdated) => log::warn!("Surface outdated"),
+            }
         }
+
+        Event::MainEventsCleared => {
+            state.window.request_redraw();
+        }
+        _ => (),
     });
 }
 
@@ -426,20 +426,6 @@ pub fn start() {
 
     let event_loop = EventLoop::new();
     let window = winit::window::Window::new(&event_loop).unwrap();
-
-    #[cfg(target_arch = "wasm32")]
-    {
-        use winit::platform::web::WindowExtWebSys;
-        // On wasm, append the canvas to the document body
-        web_sys::window()
-            .and_then(|win| win.document())
-            .and_then(|doc| doc.body())
-            .and_then(|body| {
-                body.append_child(&web_sys::Element::from(window.canvas()))
-                    .ok()
-            })
-            .expect("couldn't append canvas to document body");
-    }
 
     cfg_if::cfg_if! {
         if #[cfg(target_arch = "wasm32")]{

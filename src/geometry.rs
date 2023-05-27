@@ -63,13 +63,13 @@ const VERTICES: &[Vertex] = &[
 
 const INDICES: &[u16] = &[0, 3, 1, 1, 3, 2];
 
-pub struct Buffers {
+pub struct GeometryBuffers {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_indices: u32,
 }
 
-impl Buffers {
+impl GeometryBuffers {
     pub fn new(device: &wgpu::Device) -> Self {
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
