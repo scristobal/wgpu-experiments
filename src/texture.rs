@@ -25,7 +25,7 @@ impl Texture {
         image: &image::DynamicImage,
         label: Option<&str>,
     ) -> Result<Self> {
-        let rgba = image.as_rgba8().unwrap();
+        let rgba = image.to_rgba8();
 
         let (width, height) = rgba.dimensions();
 
@@ -53,7 +53,7 @@ impl Texture {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            rgba,
+            &rgba,
             wgpu::ImageDataLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * width),

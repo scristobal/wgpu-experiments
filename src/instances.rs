@@ -64,14 +64,15 @@ pub struct InstanceBuffer {
 
 impl InstanceBuffer {
     pub fn new(device: &wgpu::Device, rows: u32, cols: u32) -> Self {
+        const SPACE_BETWEEN: f32 = 3.0;
+
         let instances = (0..rows)
             .flat_map(|z| {
                 (0..cols).map(move |x| {
-                    let position = cgmath::Vector3 {
-                        x: 2.0 * x as f32 - (2.0 * cols as f32 * 0.5),
-                        y: 0.0,
-                        z: 2.0 * z as f32 - (2.0 * rows as f32 * 0.5),
-                    };
+                    let x = SPACE_BETWEEN * (x as f32 - cols as f32 / 2.0);
+                    let z = SPACE_BETWEEN * (z as f32 - rows as f32 / 2.0);
+
+                    let position = cgmath::Vector3 { x, y: 0.0, z };
 
                     let rotation = if position.is_zero() {
                         cgmath::Quaternion::from_axis_angle(
@@ -79,7 +80,7 @@ impl InstanceBuffer {
                             cgmath::Deg(0.0),
                         )
                     } else {
-                        cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(0.0))
+                        cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
                     };
 
                     let scale = 1.0;
