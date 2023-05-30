@@ -5,12 +5,11 @@ mod model;
 mod resources;
 mod texture;
 
-use instances::RawInstance;
-use model::Vertex;
+use instances::{Instance, RawInstance};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-use model::DrawModel;
+use model::{DrawModel, Vertex};
 use wgpu::util::DeviceExt;
 use winit::{
     event::*,
@@ -266,10 +265,10 @@ impl State {
          *
          */
 
-        let instances::InstanceBuffer {
+        let instances::Instances {
             instance_buffer,
             num_instances,
-        } = instances::InstanceBuffer::new(&device, 10, 10);
+        } = instances::Instances::new(&device, 10, 10);
 
         Self {
             surface,
@@ -359,11 +358,8 @@ impl State {
 
         render_pass.set_pipeline(&self.render_pipeline);
 
-        let mesh = &self.obj_model.meshes[0];
-        let material = &self.obj_model.materials[mesh.material];
-        render_pass.draw_mesh_instanced(
-            mesh,
-            material,
+        render_pass.draw_model_instanced(
+            &self.obj_model,
             0..self.num_instances as u32,
             &self.camera_bind_group,
         );

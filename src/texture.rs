@@ -36,7 +36,7 @@ impl Texture {
         };
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("diffuse_texture"),
+            label,
             size,
             mip_level_count: 1,
             sample_count: 1,

@@ -1,22 +1,8 @@
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
 
-pub struct Instance {
-    position: cgmath::Vector3<f32>,
-    rotation: cgmath::Quaternion<f32>,
-    scale: f32,
-}
-
-impl Instance {
-    fn to_raw(&self) -> RawInstance {
-        let model = cgmath::Matrix4::from_translation(self.position)
-            * cgmath::Matrix4::from(self.rotation)
-            * cgmath::Matrix4::from_scale(self.scale);
-
-        RawInstance {
-            model: model.into(),
-        }
-    }
+pub trait Instance {
+    fn desc() -> wgpu::VertexBufferLayout<'static>;
 }
 
 #[repr(C)]
@@ -25,8 +11,8 @@ pub struct RawInstance {
     model: [[f32; 4]; 4],
 }
 
-impl RawInstance {
-    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+impl Instance for RawInstance {
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<RawInstance>() as wgpu::BufferAddress,
@@ -57,12 +43,30 @@ impl RawInstance {
     }
 }
 
-pub struct InstanceBuffer {
+struct Transform {
+    translation: cgmath::Vector3<f32>,
+    rotation: cgmath::Quaternion<f32>,
+    scale: f32,
+}
+
+impl Transform {
+    fn to_raw(&self) -> RawInstance {
+        let model = cgmath::Matrix4::from_translation(self.translation)
+            * cgmath::Matrix4::from(self.rotation)
+            * cgmath::Matrix4::from_scale(self.scale);
+
+        RawInstance {
+            model: model.into(),
+        }
+    }
+}
+
+pub struct Instances {
     pub instance_buffer: wgpu::Buffer,
     pub num_instances: u32,
 }
 
-impl InstanceBuffer {
+impl Instances {
     pub fn new(device: &wgpu::Device, rows: u32, cols: u32) -> Self {
         const SPACE_BETWEEN: f32 = 3.0;
 
@@ -85,8 +89,8 @@ impl InstanceBuffer {
 
                     let scale = 1.0;
 
-                    Instance {
-                        position,
+                    Transform {
+                        translation: position,
                         rotation,
                         scale,
                     }
@@ -94,7 +98,7 @@ impl InstanceBuffer {
             })
             .collect::<Vec<_>>();
 
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_data = instances.iter().map(Transform::to_raw).collect::<Vec<_>>();
 
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("instance_buffer"),
