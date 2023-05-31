@@ -43,7 +43,7 @@ impl Instance for RawInstance {
     }
 }
 
-struct Transform {
+pub struct Transform {
     translation: cgmath::Vector3<f32>,
     rotation: cgmath::Quaternion<f32>,
     scale: f32,
@@ -67,38 +67,8 @@ pub struct Instances {
 }
 
 impl Instances {
-    pub fn new(device: &wgpu::Device, rows: u32, cols: u32) -> Self {
-        const SPACE_BETWEEN: f32 = 3.0;
-
-        let instances = (0..rows)
-            .flat_map(|z| {
-                (0..cols).map(move |x| {
-                    let x = SPACE_BETWEEN * (x as f32 - cols as f32 / 2.0);
-                    let z = SPACE_BETWEEN * (z as f32 - rows as f32 / 2.0);
-
-                    let position = cgmath::Vector3 { x, y: 0.0, z };
-
-                    let rotation = if position.is_zero() {
-                        cgmath::Quaternion::from_axis_angle(
-                            cgmath::Vector3::unit_z(),
-                            cgmath::Deg(0.0),
-                        )
-                    } else {
-                        cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
-                    };
-
-                    let scale = 1.0;
-
-                    Transform {
-                        translation: position,
-                        rotation,
-                        scale,
-                    }
-                })
-            })
-            .collect::<Vec<_>>();
-
-        let instance_data = instances.iter().map(Transform::to_raw).collect::<Vec<_>>();
+    pub fn from_transforms(transforms: &[Transform], device: &wgpu::Device) -> Self {
+        let instance_data = transforms.iter().map(Transform::to_raw).collect::<Vec<_>>();
 
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("instance_buffer"),
@@ -108,7 +78,35 @@ impl Instances {
 
         Self {
             instance_buffer,
-            num_instances: cols * rows,
+            num_instances: transforms.len() as u32,
         }
     }
+}
+
+pub fn sample_transform_field(rows: u32, cols: u32) -> Vec<Transform> {
+    const SPACE_BETWEEN: f32 = 4.0;
+    (0..rows)
+        .flat_map(|z| {
+            (0..cols).map(move |x| {
+                let x = SPACE_BETWEEN * (x as f32 - cols as f32 / 2.0);
+                let z = SPACE_BETWEEN * (z as f32 - rows as f32 / 2.0);
+
+                let translation = cgmath::Vector3 { x, y: 0.0, z };
+
+                let rotation = if translation.is_zero() {
+                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+                } else {
+                    cgmath::Quaternion::from_axis_angle(translation.normalize(), cgmath::Deg(45.0))
+                };
+
+                let scale = 1.0;
+
+                Transform {
+                    translation,
+                    rotation,
+                    scale,
+                }
+            })
+        })
+        .collect::<Vec<_>>()
 }

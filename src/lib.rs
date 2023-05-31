@@ -31,8 +31,7 @@ struct State {
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
     camera_controller: camera::CameraController,
-    instance_buffer: wgpu::Buffer,
-    num_instances: u32,
+    instances: instances::Instances,
     obj_model: model::Model,
 }
 
@@ -265,10 +264,9 @@ impl State {
          *
          */
 
-        let instances::Instances {
-            instance_buffer,
-            num_instances,
-        } = instances::Instances::new(&device, 10, 10);
+        let sample_transforms = instances::sample_transform_field(10, 10);
+
+        let instances = instances::Instances::from_transforms(&sample_transforms, &device);
 
         Self {
             surface,
@@ -283,8 +281,7 @@ impl State {
             camera_buffer,
             camera_bind_group,
             camera_controller,
-            instance_buffer,
-            num_instances,
+            instances,
             render_pipeline,
             obj_model,
         }
@@ -354,15 +351,9 @@ impl State {
             }),
         });
 
-        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-
         render_pass.set_pipeline(&self.render_pipeline);
 
-        render_pass.draw_model_instanced(
-            &self.obj_model,
-            0..self.num_instances as u32,
-            &self.camera_bind_group,
-        );
+        render_pass.draw_model(&self.obj_model, &self.instances, &self.camera_bind_group);
 
         drop(render_pass);
 
