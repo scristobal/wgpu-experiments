@@ -54,23 +54,6 @@ struct LightUniform {
 
 impl State {
     async fn new(window: Window) -> Self {
-        #[cfg(target_arch = "wasm32")]
-        {
-            // Winit prevents sizing with CSS`dd
-            use winit::dpi::PhysicalSize;
-            window.set_inner_size(PhysicalSize::new(512, 512));
-
-            use winit::platform::web::WindowExtWebSys;
-
-            let canvas = window.canvas();
-
-            let window = web_sys::window().unwrap();
-            let document = window.document().unwrap();
-            let body = document.body().unwrap();
-
-            body.append_child(&canvas).unwrap();
-        }
-
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             dx12_shader_compiler: Default::default(),
@@ -107,7 +90,7 @@ impl State {
 
         let surface_caps = surface.get_capabilities(&adapter);
 
-        let surface_format = surface_caps.formats[0];
+        let surface_format = *surface_caps.formats.first().unwrap();
         // .iter()
         // .copied()
         // .find(|f| f == &wgpu::TextureFormat::Rgba8UnormSrgb)
@@ -141,6 +124,7 @@ impl State {
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("texture_bind_group_layout"),
                 entries: &[
+                    // diffuse map
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::FRAGMENT,
@@ -153,6 +137,23 @@ impl State {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    // normal map
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
@@ -173,9 +174,9 @@ impl State {
                 .unwrap();
 
         /*
-         *
-         * CAMERA RELATED STUFF
-         *
+
+        Camera
+
          */
         let camera = camera::Camera::new(config.width as f32, config.height as f32);
         let camera_controller = camera::CameraController::new(0.2);
@@ -220,7 +221,7 @@ impl State {
         */
 
         let light_uniform = LightUniform {
-            position: [2.0, 2.0, 2.0],
+            position: [4.0, 4.0, 2.0],
             _padding: 0,
             color: [1.0, 1.0, 1.0],
             _padding2: 0,
@@ -257,9 +258,9 @@ impl State {
         });
 
         /*
-         *
-         * RENDER AND PIPELINE STUFF
-         *
+
+        RENDER PIPELINES
+
          */
 
         let render_pipeline = {
@@ -312,9 +313,9 @@ impl State {
         };
 
         /*
-         *
-         * VERTEX SHADER BUFFERS: vertices and instantiation
-         *
+
+        INSTANCES
+
          */
 
         let sample_transforms = instances::sample_transform_field(10, 10);
@@ -428,12 +429,12 @@ impl State {
             &self.light_bind_group,
         );
 
-        render_pass.set_pipeline(&self.light_render_pipeline);
-        render_pass.draw_light_model(
-            &self.obj_model,
-            &self.camera_bind_group,
-            &self.light_bind_group,
-        );
+        // render_pass.set_pipeline(&self.light_render_pipeline);
+        // render_pass.draw_light_model(
+        //     &self.obj_model,
+        //     &self.camera_bind_group,
+        //     &self.light_bind_group,
+        // );
 
         drop(render_pass);
 
@@ -492,29 +493,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
-pub fn start() {
-    cfg_if::cfg_if! {
-        if #[cfg(target_arch = "wasm32")]{
-            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-            console_log::init().expect("could not initialize logger");
-        } else {
-            env_logger::init();
-        }
-    }
-
-    let event_loop = EventLoop::new();
-    let window = winit::window::Window::new(&event_loop).unwrap();
-
-    cfg_if::cfg_if! {
-        if #[cfg(target_arch = "wasm32")]{
-            wasm_bindgen_futures::spawn_local(run(event_loop, window));
-        } else {
-            pollster::block_on(run(event_loop, window));
-        }
-    }
-}
-
 fn create_render_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -531,7 +509,7 @@ fn create_render_pipeline(
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: "vs_main",
-            buffers: &[model::ModelVertex::desc(), instances::RawInstance::desc()],
+            buffers: vertex_layouts,
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
@@ -559,7 +537,7 @@ fn create_render_pipeline(
             conservative: false,
         },
         depth_stencil: Some(wgpu::DepthStencilState {
-            format: texture::Texture::DEPTH_FORMAT,
+            format: depth_format.unwrap(),
             depth_write_enabled: true,
             depth_compare: wgpu::CompareFunction::Less,
             stencil: wgpu::StencilState::default(),
@@ -572,4 +550,42 @@ fn create_render_pipeline(
         },
         multiview: None,
     })
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
+pub fn start() {
+    cfg_if::cfg_if! {
+        if #[cfg(target_arch = "wasm32")]{
+            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+            console_log::init().expect("could not initialize logger");
+        } else {
+            env_logger::init();
+        }
+    }
+
+    let event_loop = EventLoop::new();
+    let window = winit::window::Window::new(&event_loop).unwrap();
+    #[cfg(target_arch = "wasm32")]
+    {
+        // Winit prevents sizing with CSS`dd
+        use winit::dpi::PhysicalSize;
+        window.set_inner_size(PhysicalSize::new(1024, 1024));
+
+        use winit::platform::web::WindowExtWebSys;
+
+        let canvas = window.canvas();
+
+        let window = web_sys::window().unwrap();
+        let document = window.document().unwrap();
+        let body = document.body().unwrap();
+
+        body.append_child(&canvas).unwrap();
+    }
+    cfg_if::cfg_if! {
+        if #[cfg(target_arch = "wasm32")]{
+            wasm_bindgen_futures::spawn_local(run(event_loop, window));
+        } else {
+            pollster::block_on(run(event_loop, window));
+        }
+    }
 }

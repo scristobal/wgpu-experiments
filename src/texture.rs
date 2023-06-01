@@ -14,9 +14,10 @@ impl Texture {
         queue: &wgpu::Queue,
         bytes: &[u8],
         label: &str,
+        format: wgpu::TextureFormat,
     ) -> Result<Self> {
         let image = image::load_from_memory(bytes)?;
-        Self::from_image(device, queue, &image, Some(label))
+        Self::from_image(device, queue, &image, Some(label), format)
     }
 
     pub fn from_image(
@@ -24,6 +25,7 @@ impl Texture {
         queue: &wgpu::Queue,
         image: &image::DynamicImage,
         label: Option<&str>,
+        format: wgpu::TextureFormat,
     ) -> Result<Self> {
         let rgba = image.to_rgba8();
 
@@ -41,7 +43,7 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
