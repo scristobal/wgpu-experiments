@@ -25,6 +25,7 @@ image = { version = "0.24", default-features = false,features = ["png", "jpeg"]}
 anyhow = "1.0.71"
 cgmath = "0.18.0"
 tobj = { version = "4.0.0", features = ["async"]}
+instant = "0.1.12"
 
 
 

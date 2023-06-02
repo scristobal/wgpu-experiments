@@ -81,6 +81,7 @@ pub async fn load_model(
         &tobj::LoadOptions {
             triangulate: true,
             single_index: true,
+
             ..Default::default()
         },
         |p| async move {

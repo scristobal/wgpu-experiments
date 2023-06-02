@@ -2260,6 +2260,7 @@ dependencies = [
  "getrandom",
  "glob",
  "image",
+ "instant",
  "js-sys",
  "log",
  "pollster",

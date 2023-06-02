@@ -29,6 +29,7 @@ struct State {
     render_pipeline: wgpu::RenderPipeline,
     depth_texture: texture::Texture,
     camera: camera::Camera,
+    projection: camera::Projection,
     camera_uniform: camera::CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
@@ -178,11 +179,13 @@ impl State {
         Camera
 
          */
-        let camera = camera::Camera::new(config.width as f32, config.height as f32);
-        let camera_controller = camera::CameraController::new(0.2);
+        let camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
+        let projection =
+            camera::Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
+        let camera_controller = camera::CameraController::new(4.0, 0.4);
 
         let mut camera_uniform = camera::CameraUniform::new();
-        camera_uniform.update_view_proj(&camera);
+        camera_uniform.update_view_proj(&camera, &projection);
 
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
@@ -318,7 +321,7 @@ impl State {
 
          */
 
-        let sample_transforms = instances::sample_transform_field(10, 10);
+        let sample_transforms = instances::sample_transform_field(3, 3);
 
         let instances = instances::Instances::from_transforms(&sample_transforms, &device);
 
@@ -331,6 +334,7 @@ impl State {
             window,
             depth_texture,
             camera,
+            projection,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
@@ -359,28 +363,50 @@ impl State {
             );
 
             self.surface.configure(&self.device, &self.config);
+
+            self.projection.resize(new_size.width, new_size.height);
         }
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_controller.process_events(event)
+        match event {
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode: Some(key),
+                        state,
+                        ..
+                    },
+                ..
+            } => self.camera_controller.process_keyboard(*key, *state),
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.camera_controller.process_scroll(delta);
+                true
+            }
+
+            _ => false,
+        }
     }
 
-    fn update(&mut self) {
-        self.camera_controller.update_camera(&mut self.camera);
-        self.camera_uniform.update_view_proj(&self.camera);
+    fn update(&mut self, dt: instant::Duration) {
+        // updates camera position
+        self.camera_controller.update_camera(&mut self.camera, dt);
+        self.camera_uniform
+            .update_view_proj(&self.camera, &self.projection);
+
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
 
-        // Update the light
+        // updates light position
         let old_position: cgmath::Vector3<_> = self.light_uniform.position.into();
-        self.light_uniform.position =
-            (cgmath::Quaternion::from_axis_angle((0.0, 1.0, 0.0).into(), cgmath::Deg(1.0))
-                * old_position)
-                .into();
+        self.light_uniform.position = (cgmath::Quaternion::from_axis_angle(
+            (0.0, 1.0, 0.0).into(),
+            cgmath::Deg(60.0 * dt.as_secs_f32()),
+        ) * old_position)
+            .into();
         self.queue.write_buffer(
             &self.light_buffer,
             0,
@@ -429,12 +455,12 @@ impl State {
             &self.light_bind_group,
         );
 
-        // render_pass.set_pipeline(&self.light_render_pipeline);
-        // render_pass.draw_light_model(
-        //     &self.obj_model,
-        //     &self.camera_bind_group,
-        //     &self.light_bind_group,
-        // );
+        render_pass.set_pipeline(&self.light_render_pipeline);
+        render_pass.draw_light_model(
+            &self.obj_model,
+            &self.camera_bind_group,
+            &self.light_bind_group,
+        );
 
         drop(render_pass);
 
@@ -451,45 +477,61 @@ impl State {
 async fn run(event_loop: EventLoop<()>, window: Window) {
     let mut state = State::new(window).await;
 
-    event_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            ref event,
-            window_id,
-        } if window_id == state.window.id() && !state.input(event) => match event {
-            WindowEvent::CloseRequested
-            | WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
-                        ..
-                    },
-                ..
-            } => *control_flow = ControlFlow::Exit,
-            WindowEvent::Resized(physical_size) => {
-                state.resize(*physical_size);
-            }
-            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                state.resize(**new_inner_size);
-            }
-            _ => {}
-        },
+    let mut last_render_time = instant::Instant::now();
 
-        Event::RedrawRequested(window_id) if window_id == state.window.id() => {
-            state.update();
-            match state.render() {
-                Ok(_) => {}
-                Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
-                Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
-                Err(wgpu::SurfaceError::Outdated) => log::warn!("Surface outdated"),
-            }
-        }
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
 
-        Event::MainEventsCleared => {
-            state.window.request_redraw();
+        match event {
+
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion{ delta, },
+                .. // We're not using device_id currently
+            } =>{
+                state.camera_controller.process_mouse(delta.0, delta.1);
+}
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == state.window.id() && !state.input(event) => match event {
+                WindowEvent::CloseRequested
+                | WindowEvent::KeyboardInput {
+                    input:
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        },
+                    ..
+                } => *control_flow = ControlFlow::Exit,
+                WindowEvent::Resized(physical_size) => {
+                    state.resize(*physical_size);
+                }
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    state.resize(**new_inner_size);
+                }
+                _ => {}
+            },
+
+            Event::RedrawRequested(window_id) if window_id == state.window.id() => {
+                let now = instant::Instant::now();
+                let dt = now - last_render_time;
+                last_render_time = now;
+                state.update(dt);
+                match state.render() {
+                    Ok(_) => {}
+                    Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                    Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
+                    Err(wgpu::SurfaceError::Outdated) => log::warn!("Surface outdated"),
+                }
+            }
+
+            Event::MainEventsCleared => {
+                state.window.request_redraw();
+            }
+            _ => (),
         }
-        _ => (),
     });
 }
 
