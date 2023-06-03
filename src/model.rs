@@ -82,7 +82,6 @@ impl Material {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
                 },
-                // NEW!
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::TextureView(&normal_texture.view),
@@ -98,7 +97,7 @@ impl Material {
         Self {
             name: String::from(name),
             diffuse_texture,
-            normal_texture, // NEW!
+            normal_texture,
             bind_group,
         }
     }
@@ -171,7 +170,6 @@ where
     }
 }
 
-// model.rs
 pub trait DrawLight<'a> {
     fn draw_light_mesh(
         &mut self,

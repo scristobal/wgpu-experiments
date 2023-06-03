@@ -24,6 +24,14 @@ struct Light {
 @group(2) @binding(0)
 var<uniform> light: Light;
 
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+    @location(1) tex_coords: vec2<f32>,
+    @location(2) normal: vec3<f32>,
+    @location(3) tangent: vec3<f32>,
+    @location(4) bitangent: vec3<f32>,
+}
+
 struct InstanceInput {
     @location(5) model_matrix_0: vec4<f32>,
     @location(6) model_matrix_1: vec4<f32>,
@@ -35,13 +43,6 @@ struct InstanceInput {
     @location(11) normal_matrix_2: vec3<f32>,
 };
 
-struct VertexInput {
-    @location(0) position: vec3<f32>,
-    @location(1) tex_coords: vec2<f32>,
-    @location(2) normal: vec3<f32>,
-    @location(3) tangent: vec3<f32>,
-    @location(4) bitangent: vec3<f32>,
-}
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -64,7 +65,7 @@ fn vs_main(
         instance.model_matrix_3,
     );
 
-   let normal_matrix = mat3x3<f32>(
+    let normal_matrix = mat3x3<f32>(
         instance.normal_matrix_0,
         instance.normal_matrix_1,
         instance.normal_matrix_2,
@@ -95,7 +96,7 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let object_color =  textureSample(t_diffuse, s_diffuse, in.tex_coords);
+    let object_color = textureSample(t_diffuse, s_diffuse, in.tex_coords);
     let object_normal = textureSample(t_normal, s_normal, in.tex_coords);
 
     let ambient_strength = 0.1;
