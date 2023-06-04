@@ -24,8 +24,6 @@ struct State {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
-    window: Window,
     render_pipeline: wgpu::RenderPipeline,
     depth_texture: texture::Texture,
     camera: camera::Camera,
@@ -54,7 +52,7 @@ struct LightUniform {
 }
 
 impl State {
-    async fn new(window: Window) -> Self {
+    async fn new(window: &Window) -> State {
         /*
         Device
          */
@@ -311,8 +309,7 @@ impl State {
             device,
             queue,
             config,
-            size,
-            window,
+
             depth_texture,
             camera,
             projection,
@@ -332,7 +329,6 @@ impl State {
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
-            self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
 
@@ -347,6 +343,13 @@ impl State {
 
             self.projection.resize(new_size.width, new_size.height);
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.resize(winit::dpi::PhysicalSize::<u32> {
+            width: self.config.width,
+            height: self.config.height,
+        })
     }
 
     fn update(&mut self, dt: instant::Duration) {
@@ -439,7 +442,7 @@ impl State {
 }
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
-    let mut state = State::new(window).await;
+    let mut state = State::new(&window).await;
 
     let mut last_render_time = instant::Instant::now();
 
@@ -483,14 +486,14 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 _ => (),
             },
 
-            Event::RedrawRequested(window_id) if window_id == state.window.id() => {
+            Event::RedrawRequested(_) => {
                 let now = instant::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
                 state.update(dt);
                 match state.render() {
                     Ok(_) => {}
-                    Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+                    Err(wgpu::SurfaceError::Lost) => state.reset(),
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
                     Err(wgpu::SurfaceError::Outdated) => log::warn!("Surface outdated"),
@@ -498,7 +501,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             }
 
             Event::MainEventsCleared => {
-                state.window.request_redraw();
+                window.request_redraw();
             }
             _ => (),
         }
@@ -517,7 +520,7 @@ fn create_render_pipeline(
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some("Render Pipeline"),
-        layout: Some(&layout),
+        layout: Some(layout),
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: "vs_main",
