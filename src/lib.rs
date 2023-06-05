@@ -10,7 +10,6 @@ mod texture;
 use wasm_bindgen::prelude::*;
 
 use cgmath::Rotation3;
-use instances::Instance;
 use model::Vertex;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -18,6 +17,8 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
+
+use std::mem;
 
 struct State {
     surface: wgpu::Surface,
@@ -33,7 +34,9 @@ struct State {
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
 
-    instances: instances::Instances,
+    instance_buffer: wgpu::Buffer,
+    num_instances: u32,
+
     model: model::Model,
 
     light_uniform: light::LightUniform,
@@ -257,7 +260,20 @@ impl State {
 
         let sample_transforms = instances::sample_transform_field(1, 1);
 
-        let instances = instances::Instances::from_transforms(&sample_transforms, &device);
+        let transforms = instances::sample_transform_field(10, 10);
+
+        let instance_data = transforms
+            .iter()
+            .map(instances::Transform::to_raw)
+            .collect::<Vec<_>>();
+
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("instance_buffer"),
+            contents: bytemuck::cast_slice(&instance_data),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let num_instances = transforms.len() as u32;
 
         let render_pipeline = {
             let render_pipeline_layout =
@@ -271,7 +287,49 @@ impl State {
                     push_constant_ranges: &[],
                 });
 
-            let vertex_layouts = &[model::ModelVertex::desc(), instances::RawInstance::desc()];
+            let instances_layout = wgpu::VertexBufferLayout {
+                array_stride: mem::size_of::<instances::RawInstance>() as wgpu::BufferAddress,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &[
+                    wgpu::VertexAttribute {
+                        offset: 0,
+                        shader_location: 5, // 0 is position, 1 is tex_coords, 2,3 and 4 are reserved for later, hence start at 5
+                        format: wgpu::VertexFormat::Float32x4,
+                    },
+                    wgpu::VertexAttribute {
+                        offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                        shader_location: 6,
+                        format: wgpu::VertexFormat::Float32x4,
+                    },
+                    wgpu::VertexAttribute {
+                        offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                        shader_location: 7,
+                        format: wgpu::VertexFormat::Float32x4,
+                    },
+                    wgpu::VertexAttribute {
+                        offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                        shader_location: 8,
+                        format: wgpu::VertexFormat::Float32x4,
+                    },
+                    wgpu::VertexAttribute {
+                        offset: mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
+                        shader_location: 9,
+                        format: wgpu::VertexFormat::Float32x3,
+                    },
+                    wgpu::VertexAttribute {
+                        offset: mem::size_of::<[f32; 19]>() as wgpu::BufferAddress,
+                        shader_location: 10,
+                        format: wgpu::VertexFormat::Float32x3,
+                    },
+                    wgpu::VertexAttribute {
+                        offset: mem::size_of::<[f32; 22]>() as wgpu::BufferAddress,
+                        shader_location: 11,
+                        format: wgpu::VertexFormat::Float32x3,
+                    },
+                ],
+            };
+
+            let vertex_layouts = &[model::ModelVertex::desc(), instances_layout];
 
             let shader = wgpu::ShaderModuleDescriptor {
                 label: Some("Normal Shader"),
@@ -340,7 +398,8 @@ impl State {
             camera_controller,
             camera_bind_group,
             camera_buffer,
-            instances,
+            instance_buffer,
+            num_instances,
             render_pipeline,
             model: obj_model,
             light_uniform,
@@ -405,7 +464,7 @@ impl State {
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture().unwrap();
+        let output = self.surface.get_current_texture()?;
 
         let view = output
             .texture
@@ -442,12 +501,12 @@ impl State {
             let material = &self.model.materials[mesh.material];
 
             render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.instances.instance_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.set_bind_group(0, &material.bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_bind_group(2, &self.light_bind_group, &[]);
-            render_pass.draw_indexed(0..mesh.num_elements, 0, 0..self.instances.num_instances);
+            render_pass.draw_indexed(0..mesh.num_elements, 0, 0..self.num_instances);
         }
 
         render_pass.set_pipeline(&self.light_render_pipeline);
