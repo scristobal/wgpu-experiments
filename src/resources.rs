@@ -100,6 +100,7 @@ pub async fn load_model(
             wgpu::TextureFormat::Rgba8UnormSrgb, // diffusion textures
         )
         .await?;
+
         let normal_texture = load_texture(
             &m.normal_texture.unwrap(),
             device,
@@ -112,7 +113,7 @@ pub async fn load_model(
             device,
             &m.name,
             diffuse_texture,
-            normal_texture, // NEW!
+            normal_texture,
             layout,
         ))
     }
@@ -141,7 +142,7 @@ pub async fn load_model(
             let indices = &m.mesh.indices;
             let mut triangles_included = vec![0; vertices.len()];
 
-            // Calculate tangents and bitangets. We're going to
+            // Calculate tangents and bitangents. We're going to
             // use the triangles, so we need to loop through the
             // indices in chunks of 3
             for c in indices.chunks(3) {
@@ -211,6 +212,7 @@ pub async fn load_model(
                 contents: bytemuck::cast_slice(&vertices),
                 usage: wgpu::BufferUsages::VERTEX,
             });
+
             let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{:?} Index Buffer", file_name)),
                 contents: bytemuck::cast_slice(&m.mesh.indices),
