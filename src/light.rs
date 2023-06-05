@@ -36,16 +36,12 @@ pub struct LightUniform {
 }
 
 pub struct LightController {
-    rotate_horizontal: f32,
     angular_velocity: f32,
 }
 
 impl LightController {
     pub fn new(angular_velocity: f32) -> Self {
-        Self {
-            rotate_horizontal: 0.0,
-            angular_velocity,
-        }
+        Self { angular_velocity }
     }
     pub fn update_light(&self, light: &mut Light, dt: Duration) {
         let old_position: cgmath::Vector3<_> = light.position.to_vec();

@@ -426,9 +426,8 @@ impl State {
         self.camera_controller
             .update_camera(&mut self.view.camera, dt);
 
-        let camera_uniform = camera::CameraUniform::new(&self.view.camera, &self.view.projection);
-
         // writes camera position to the buffer
+        let camera_uniform = camera::CameraUniform::new(&self.view.camera, &self.view.projection);
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
@@ -436,12 +435,10 @@ impl State {
         );
 
         // updates light position
-
         self.light_controller.update_light(&mut self.light, dt);
 
-        let light_uniform = self.light.uniform();
-
         // writes camera position to the buffer
+        let light_uniform = self.light.uniform();
         self.queue.write_buffer(
             &self.light_buffer,
             0,
