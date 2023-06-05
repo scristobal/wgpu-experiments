@@ -74,6 +74,57 @@ impl Projection {
     }
 }
 
+pub struct ViewBuilder {
+    camera: Option<Camera>,
+    projection: Option<Projection>,
+}
+
+impl ViewBuilder {
+    pub fn new() -> Self {
+        Self {
+            camera: None,
+            projection: None,
+        }
+    }
+    pub fn set_camera<V: Into<Point3<f32>>, Y: Into<Rad<f32>>, P: Into<Rad<f32>>>(
+        self,
+        position: V,
+        yaw: Y,
+        pitch: P,
+    ) -> Self {
+        Self {
+            camera: Some(Camera::new(position, yaw, pitch)),
+            ..self
+        }
+    }
+
+    pub fn set_projection<F: Into<Rad<f32>>>(
+        self,
+        width: u32,
+        height: u32,
+        fovy: F,
+        znear: f32,
+        zfar: f32,
+    ) -> Self {
+        Self {
+            projection: Some(Projection::new(width, height, fovy, znear, zfar)),
+            ..self
+        }
+    }
+
+    pub fn build(self) -> View {
+        View {
+            camera: self.camera.unwrap(),
+            projection: self.projection.unwrap(),
+        }
+    }
+}
+
+pub struct View {
+    pub camera: Camera,
+    pub projection: Projection,
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {

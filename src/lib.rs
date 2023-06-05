@@ -9,7 +9,6 @@ mod texture;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-use cgmath::Rotation3;
 use model::Vertex;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -25,38 +24,37 @@ struct State {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    render_pipeline: wgpu::RenderPipeline,
-    depth_texture: texture::Texture,
 
-    camera: camera::Camera,
-    projection: camera::Projection,
+    view: camera::View,
     camera_controller: camera::CameraController,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
 
-    instance_buffer: wgpu::Buffer,
-    num_instances: u32,
-
-    model: model::Model,
-
-    light_uniform: light::LightUniform,
+    light: light::Light,
+    light_controller: light::LightController,
     light_buffer: wgpu::Buffer,
     light_bind_group: wgpu::BindGroup,
     light_render_pipeline: wgpu::RenderPipeline,
+
+    model: model::Model,
+    instance_buffer: wgpu::Buffer,
+    num_instances: u32,
+    depth_texture: texture::Texture,
+    render_pipeline: wgpu::RenderPipeline,
 }
 
 impl State {
     async fn new(window: &Window) -> State {
         let (surface, device, queue, config) = init(window).await;
 
-        /*
-        Camera
-         */
-        let camera = camera::Camera::new((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0));
-        let projection =
-            camera::Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
+        /* Camera */
 
-        let camera_uniform = camera::CameraUniform::new(&camera, &projection);
+        let view = camera::ViewBuilder::new()
+            .set_camera((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0))
+            .set_projection(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0)
+            .build();
+
+        let camera_uniform = camera::CameraUniform::new(&view.camera, &view.projection);
 
         let camera_controller = camera::CameraController::new(4.0, 0.4);
 
@@ -90,16 +88,13 @@ impl State {
             }],
         });
 
-        /*
-        Light
-        */
+        /* Light */
 
-        let light_uniform = light::LightUniform {
-            position: [4.0, 4.0, 2.0],
-            _padding: 0,
-            color: [1.0, 1.0, 1.0],
-            _padding2: 0,
-        };
+        let light = light::Light::new([4.0, 4.0, 2.0], [1.0, 1.0, 1.0]);
+
+        let light_controller = light::LightController::new(60.0);
+
+        let light_uniform = light.uniform();
 
         let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Light VB"),
@@ -197,9 +192,7 @@ impl State {
             })
         };
 
-        /*
-        Textures
-         */
+        /* Geometry */
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -249,16 +242,10 @@ impl State {
             "depth_texture",
         );
 
-        /*
-        Geometry
-         */
-
         let obj_model =
             resources::load_model("cube.obj", &device, &queue, &texture_bind_group_layout)
                 .await
                 .unwrap();
-
-        let sample_transforms = instances::sample_transform_field(1, 1);
 
         let transforms = instances::sample_transform_field(10, 10);
 
@@ -393,8 +380,7 @@ impl State {
             queue,
             config,
             depth_texture,
-            camera,
-            projection,
+            view,
             camera_controller,
             camera_bind_group,
             camera_buffer,
@@ -402,7 +388,8 @@ impl State {
             num_instances,
             render_pipeline,
             model: obj_model,
-            light_uniform,
+            light,
+            light_controller,
             light_buffer,
             light_bind_group,
             light_render_pipeline,
@@ -423,7 +410,7 @@ impl State {
 
             self.surface.configure(&self.device, &self.config);
 
-            self.projection.resize(new_size.width, new_size.height);
+            self.view.projection.resize(new_size.width, new_size.height);
         }
     }
 
@@ -436,9 +423,10 @@ impl State {
 
     fn update(&mut self, dt: instant::Duration) {
         // updates camera position
-        self.camera_controller.update_camera(&mut self.camera, dt);
+        self.camera_controller
+            .update_camera(&mut self.view.camera, dt);
 
-        let camera_uniform = camera::CameraUniform::new(&self.camera, &self.projection);
+        let camera_uniform = camera::CameraUniform::new(&self.view.camera, &self.view.projection);
 
         // writes camera position to the buffer
         self.queue.write_buffer(
@@ -448,18 +436,16 @@ impl State {
         );
 
         // updates light position
-        let old_position: cgmath::Vector3<_> = self.light_uniform.position.into();
-        self.light_uniform.position = (cgmath::Quaternion::from_axis_angle(
-            (0.0, 1.0, 0.0).into(),
-            cgmath::Deg(60.0 * dt.as_secs_f32()),
-        ) * old_position)
-            .into();
+
+        self.light_controller.update_light(&mut self.light, dt);
+
+        let light_uniform = self.light.uniform();
 
         // writes camera position to the buffer
         self.queue.write_buffer(
             &self.light_buffer,
             0,
-            bytemuck::cast_slice(&[self.light_uniform]),
+            bytemuck::cast_slice(&[light_uniform]),
         );
     }
 
