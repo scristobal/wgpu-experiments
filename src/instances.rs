@@ -3,8 +3,8 @@ use cgmath::prelude::*;
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct RawInstance {
-    model: [[f32; 4]; 4],
-    normal: [[f32; 3]; 3],
+    model_transform: [[f32; 4]; 4],
+    normal_transform: [[f32; 3]; 3],
 }
 
 pub struct Transform {
@@ -20,8 +20,8 @@ impl Transform {
             * cgmath::Matrix4::from_scale(self.scale);
 
         RawInstance {
-            model: model.into(),
-            normal: cgmath::Matrix3::from(self.rotation).into(),
+            model_transform: model.into(),
+            normal_transform: cgmath::Matrix3::from(self.rotation).into(),
         }
     }
 }

@@ -271,12 +271,11 @@ impl State {
             "depth_texture",
         );
 
-        let obj_model =
-            resources::load_model("cube.obj", &device, &queue, &texture_bind_group_layout)
-                .await
-                .unwrap();
+        let model = resources::load_model("cube.obj", &device, &queue, &texture_bind_group_layout)
+            .await
+            .unwrap();
 
-        let transforms = instances::sample_transform_field(10, 10);
+        let transforms = instances::sample_transform_field(3, 3);
 
         let instance_data = transforms
             .iter()
@@ -446,7 +445,7 @@ impl State {
             instance_buffer,
             num_instances,
             render_pipeline,
-            model: obj_model,
+            model,
             light,
             light_controller,
             light_buffer,

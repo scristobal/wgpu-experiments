@@ -10,9 +10,12 @@ pub struct ModelVertex {
     pub bitangent: [f32; 3],
 }
 
-pub struct Model {
-    pub meshes: Vec<Mesh>,
-    pub materials: Vec<Material>,
+pub struct Mesh {
+    pub name: String,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub num_elements: u32,
+    pub material: usize,
 }
 
 pub struct Material {
@@ -20,6 +23,11 @@ pub struct Material {
     pub diffuse_texture: texture::Texture,
     pub normal_texture: texture::Texture,
     pub bind_group: wgpu::BindGroup,
+}
+
+pub struct Model {
+    pub meshes: Vec<Mesh>,
+    pub materials: Vec<Material>,
 }
 
 impl Material {
@@ -60,12 +68,4 @@ impl Material {
             bind_group,
         }
     }
-}
-
-pub struct Mesh {
-    pub name: String,
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
-    pub num_elements: u32,
-    pub material: usize,
 }

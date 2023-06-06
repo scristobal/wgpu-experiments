@@ -16,6 +16,7 @@ struct Light {
     position: vec3<f32>,
     color: vec3<f32>,
 }
+
 @group(2) @binding(0) var<uniform> light: Light;
 
 struct VertexInput {
@@ -69,6 +70,7 @@ fn vs_main(
     let world_normal = normalize(normal_matrix * model.normal);
     let world_tangent = normalize(normal_matrix * model.tangent);
     let world_bitangent = normalize(normal_matrix * model.bitangent);
+
     let tangent_matrix = transpose(mat3x3<f32>(
         world_tangent,
         world_bitangent,
