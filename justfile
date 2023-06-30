@@ -2,7 +2,7 @@
 # To learn how to do things manually, in most cases using Trunk would be better.
 ##
 
-# builds the project w/o Trunk, requires WASM to be loaded manually (commented lines in index.html)
+# builds the project w/o Trunk, requires WASM to be loaded manually (copy commented lines into index.html)
 build:
     cargo build --target=wasm32-unknown-unknown --release
     wasm-bindgen ./target/wasm32-unknown-unknown/release/wgpu_intro.wasm --out-dir ./bin --target web
@@ -16,3 +16,7 @@ build:
 serve:
     devserver --address localhost:3000
 
+
+check:
+    cargo wgsl
+    cargo check
