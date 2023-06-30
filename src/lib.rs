@@ -6,6 +6,7 @@ mod model;
 mod resources;
 mod texture;
 
+use light::UpdateBuffer;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -29,7 +30,6 @@ struct State {
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
 
-    light: light::Light,
     light_controller: light::LightController,
     light_buffer: wgpu::Buffer,
     light_bind_group: wgpu::BindGroup,
@@ -91,15 +91,9 @@ impl State {
 
         let light = light::Light::new([4.0, 4.0, 2.0], [1.0, 1.0, 1.0]);
 
-        let light_controller = light::LightController::new(60.0);
+        let light_buffer = light::LightBuffer::new(&device, &light);
 
-        let light_uniform = light.uniform();
-
-        let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Light VB"),
-            contents: bytemuck::cast_slice(&[light_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        let light_controller = light::LightController::new(60.0, light);
 
         let light_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -120,7 +114,7 @@ impl State {
             layout: &light_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: light_buffer.as_entire_binding(),
+                resource: light_buffer.buffer.as_entire_binding(),
             }],
             label: None,
         });
@@ -295,10 +289,13 @@ impl State {
                 device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Layout"),
                     bind_group_layouts: &[
-                        &texture_bind_group_layout,
-                        &camera_bind_group_layout,
-                        &light_bind_group_layout,
+                        &texture_bind_group_layout, // group(0)
+                        &camera_bind_group_layout,  // group(1)
+                        &light_bind_group_layout,   // group(2)
                     ],
+                    // render_pass.set_bind_group(0, &material.bind_group, &[]);
+                    // render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+                    // render_pass.set_bind_group(2, &self.light_bind_group, &[]);
                     push_constant_ranges: &[],
                 });
 
@@ -446,9 +443,8 @@ impl State {
             num_instances,
             render_pipeline,
             model,
-            light,
             light_controller,
-            light_buffer,
+            light_buffer: light_buffer.buffer,
             light_bind_group,
             light_render_pipeline,
         }
@@ -493,15 +489,11 @@ impl State {
         );
 
         // updates light position
-        self.light_controller.update_light(&mut self.light, dt);
+        self.light_controller.update(dt);
 
-        // writes camera position to the buffer
-        let light_uniform = self.light.uniform();
-        self.queue.write_buffer(
-            &self.light_buffer,
-            0,
-            bytemuck::cast_slice(&[light_uniform]),
-        );
+        self.light_controller
+            .light
+            .update(&self.queue, &self.light_buffer);
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -538,15 +530,19 @@ impl State {
         });
 
         render_pass.set_pipeline(&self.render_pipeline);
+
+        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+
+        render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+        render_pass.set_bind_group(2, &self.light_bind_group, &[]);
+
         for mesh in &self.model.meshes {
             let material = &self.model.materials[mesh.material];
 
             render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.set_bind_group(0, &material.bind_group, &[]);
-            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
-            render_pass.set_bind_group(2, &self.light_bind_group, &[]);
+
             render_pass.draw_indexed(0..mesh.num_elements, 0, 0..self.num_instances);
         }
 
@@ -635,6 +631,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     let mut state = State::new(&window).await;
 
     let mut last_render_time = instant::Instant::now();
+
+    window.set_cursor_visible(false);
+    window
+        .set_cursor_grab(winit::window::CursorGrabMode::Locked)
+        .unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;

@@ -1,5 +1,6 @@
 use cgmath::*;
 use instant::Duration;
+use wgpu::util::DeviceExt;
 
 pub struct Light {
     pub position: Point3<f32>,
@@ -24,6 +25,22 @@ impl Light {
     }
 }
 
+pub struct LightBuffer {
+    pub buffer: wgpu::Buffer,
+}
+
+impl LightBuffer {
+    pub fn new(device: &wgpu::Device, light: &Light) -> Self {
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Light VB"),
+            contents: bytemuck::cast_slice(&[light.uniform()]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        Self { buffer }
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LightUniform {
@@ -37,19 +54,35 @@ pub struct LightUniform {
 
 pub struct LightController {
     angular_velocity: f32,
+    pub light: Light,
 }
 
 impl LightController {
-    pub fn new(angular_velocity: f32) -> Self {
-        Self { angular_velocity }
+    pub fn new(angular_velocity: f32, light: Light) -> Self {
+        Self {
+            angular_velocity,
+            light,
+        }
     }
-    pub fn update_light(&self, light: &mut Light, dt: Duration) {
-        let old_position: cgmath::Vector3<_> = light.position.to_vec();
-        light.position = Point3::from_vec(
+    pub fn update(&mut self, dt: Duration) {
+        let old_position: cgmath::Vector3<_> = self.light.position.to_vec();
+
+        self.light.position = Point3::from_vec(
             cgmath::Quaternion::from_axis_angle(
                 (0.0, 1.0, 0.0).into(),
                 cgmath::Deg(self.angular_velocity * dt.as_secs_f32()),
             ) * old_position,
-        )
+        );
+    }
+}
+
+pub trait UpdateBuffer {
+    fn update(&self, queue: &wgpu::Queue, buffer: &wgpu::Buffer);
+}
+
+impl UpdateBuffer for Light {
+    fn update(&self, queue: &wgpu::Queue, buffer: &wgpu::Buffer) {
+        let light_uniform = self.uniform();
+        queue.write_buffer(buffer, 0, bytemuck::cast_slice(&[light_uniform]));
     }
 }
