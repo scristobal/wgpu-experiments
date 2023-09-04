@@ -1,3 +1,6 @@
 {
-    "rust-analyzer.cargo.target": "wasm32-unknown-unknown"
+    "rust-analyzer.cargo.target": "wasm32-unknown-unknown",
+    "yaml.schemas": {
+        "https://json.schemastore.org/github-workflow.json": "file:///Users/samu/repos/samu/wgpu-experiments/.github/workflows/deploy.yml"
+    }
 }
