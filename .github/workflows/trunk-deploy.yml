@@ -1,10 +1,12 @@
 name: Build and deployment with Truck
 
 on:
-  workflow_run:
+  push:
     branches: [main]
-    # workflows: [Continuous integration]
-    # types: [completed]
+  # workflow_run:
+  #   branches: [main]
+  #   workflows: [Continuous integration]
+  #   types: [completed]
 
 jobs:
   build:
