@@ -1,4 +1,4 @@
-name: Build and deployment with Truck
+name: Build and deploy with Trunk
 
 on:
   push:
