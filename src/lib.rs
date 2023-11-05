@@ -7,15 +7,13 @@ mod resources;
 mod texture;
 
 use light::UpdateBuffer;
+
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 use wgpu::util::DeviceExt;
-use winit::{
-    event::*,
-    event_loop::{ControlFlow, EventLoop},
-    window::Window,
-};
+use winit::keyboard::{Key, NamedKey, PhysicalKey};
+use winit::{event::*, event_loop::EventLoop, window::Window};
 
 use std::mem;
 
@@ -516,17 +514,19 @@ impl State {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: true,
+                    store: wgpu::StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &self.depth_texture.view,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(1.0),
-                    store: true,
+                    store: wgpu::StoreOp::Store,
                 }),
                 stencil_ops: None,
             }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
         });
 
         render_pass.set_pipeline(&self.render_pipeline);
@@ -578,9 +578,14 @@ async fn init(
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::all(),
         dx12_shader_compiler: Default::default(),
+        flags: wgpu::InstanceFlags::default(),
+        gles_minor_version: wgpu::Gles3MinorVersion::default(),
     });
 
-    let surface = unsafe { instance.create_surface(&window) }.unwrap();
+    // let window_handle = window.window_handle().unwrap().as_raw();
+    // let display_handle = window.display_handle().unwrap();
+
+    let surface = unsafe { instance.create_surface(&window).unwrap() };
 
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
@@ -632,38 +637,39 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
     let mut last_render_time = instant::Instant::now();
 
-    window.set_cursor_visible(false);
-    window
-        .set_cursor_grab(winit::window::CursorGrabMode::Locked)
-        .unwrap();
+    // window.set_cursor_visible(false);
+    // window
+    //     .set_cursor_grab(winit::window::CursorGrabMode::Locked)
+    //     .unwrap();
 
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
-
-        match event {
+    event_loop
+        .run(move |event, elwt| match event {
             Event::DeviceEvent {
                 event: DeviceEvent::MouseMotion { delta },
                 ..
             } => state.camera_controller.process_mouse(delta.0, delta.1),
             Event::WindowEvent { ref event, .. } => match event {
-                WindowEvent::CloseRequested
-                | WindowEvent::KeyboardInput {
-                    input:
-                        KeyboardInput {
+                WindowEvent::CloseRequested => elwt.exit(),
+                WindowEvent::KeyboardInput {
+                    event:
+                        KeyEvent {
                             state: ElementState::Pressed,
-                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            logical_key: Key::Named(NamedKey::Escape),
                             ..
                         },
                     ..
-                } => *control_flow = ControlFlow::Exit,
-                WindowEvent::Resized(physical_size) => state.resize(*physical_size),
-                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                    state.resize(**new_inner_size)
+                } => elwt.exit(),
+                WindowEvent::Resized(physical_size) => {
+                    cfg_if::cfg_if! {
+                    if #[cfg(target_arch = "wasm32")]{
+                    } else {
+                        state.resize(*physical_size)
+                    }}
                 }
                 WindowEvent::KeyboardInput {
-                    input:
-                        KeyboardInput {
-                            virtual_keycode: Some(key),
+                    event:
+                        KeyEvent {
+                            physical_key: PhysicalKey::Code(key),
                             state: keyboard_state,
                             ..
                         },
@@ -674,29 +680,25 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 WindowEvent::MouseWheel { delta, .. } => {
                     state.camera_controller.process_scroll(delta)
                 }
+
+                WindowEvent::RedrawRequested => {
+                    let now = instant::Instant::now();
+                    let dt = now - last_render_time;
+                    last_render_time = now;
+                    state.update(dt);
+                    match state.render() {
+                        Ok(_) => window.request_redraw(),
+                        Err(wgpu::SurfaceError::Lost) => state.reset(),
+                        Err(wgpu::SurfaceError::OutOfMemory) => elwt.exit(),
+                        Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
+                        Err(wgpu::SurfaceError::Outdated) => log::warn!("Surface outdated"),
+                    }
+                }
                 _ => (),
             },
-
-            Event::RedrawRequested(_) => {
-                let now = instant::Instant::now();
-                let dt = now - last_render_time;
-                last_render_time = now;
-                state.update(dt);
-                match state.render() {
-                    Ok(_) => {}
-                    Err(wgpu::SurfaceError::Lost) => state.reset(),
-                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
-                    Err(wgpu::SurfaceError::Outdated) => log::warn!("Surface outdated"),
-                }
-            }
-
-            Event::MainEventsCleared => {
-                window.request_redraw();
-            }
             _ => (),
-        }
-    });
+        })
+        .unwrap()
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
@@ -710,17 +712,18 @@ pub fn start() {
         }
     }
 
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new().unwrap();
     let window = winit::window::Window::new(&event_loop).unwrap();
+
     #[cfg(target_arch = "wasm32")]
     {
         // Winit prevents sizing with CSS`dd
         use winit::dpi::PhysicalSize;
-        window.set_inner_size(PhysicalSize::new(1024, 1024));
+        let _ = window.request_inner_size(PhysicalSize::new(128, 256));
 
         use winit::platform::web::WindowExtWebSys;
 
-        let canvas = window.canvas();
+        let canvas = window.canvas().unwrap();
 
         let window = web_sys::window().unwrap();
         let document = window.document().unwrap();

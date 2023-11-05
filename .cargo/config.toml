@@ -1,4 +1,6 @@
-# "rust-analyzer.cargo.target": "wasm32-unknown-unknown"
+
+
+# in .vscode/settings.json "rust-analyzer.cargo.target": "wasm32-unknown-unknown"
 
 # [build]
 # target = "wasm32-unknown-unknown"

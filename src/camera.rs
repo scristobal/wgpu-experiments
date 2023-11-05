@@ -2,8 +2,9 @@ use cgmath::*;
 use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
 use winit::dpi::PhysicalPosition;
+use winit::event::ElementState;
 use winit::event::*;
-use winit::event::{ElementState, VirtualKeyCode};
+use winit::keyboard::KeyCode;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -173,29 +174,29 @@ impl CameraController {
         }
     }
 
-    pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) {
+    pub fn process_keyboard(&mut self, key: KeyCode, state: ElementState) {
         let amount = if state == ElementState::Pressed {
             1.0
         } else {
             0.0
         };
         match key {
-            VirtualKeyCode::W | VirtualKeyCode::Up => {
+            KeyCode::KeyW | KeyCode::ArrowUp => {
                 self.amount_forward = amount;
             }
-            VirtualKeyCode::S | VirtualKeyCode::Down => {
+            KeyCode::KeyS | KeyCode::ArrowDown => {
                 self.amount_backward = amount;
             }
-            VirtualKeyCode::A | VirtualKeyCode::Left => {
+            KeyCode::KeyA | KeyCode::ArrowRight => {
                 self.amount_left = amount;
             }
-            VirtualKeyCode::D | VirtualKeyCode::Right => {
+            KeyCode::KeyD | KeyCode::ArrowLeft => {
                 self.amount_right = amount;
             }
-            VirtualKeyCode::Space => {
+            KeyCode::Space => {
                 self.amount_up = amount;
             }
-            VirtualKeyCode::LShift => {
+            KeyCode::ShiftLeft => {
                 self.amount_down = amount;
             }
             _ => {}

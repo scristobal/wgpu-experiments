@@ -8,6 +8,5 @@ open = true
 [clean]
 cargo = true
 
-[tools]
-wasm_bindgen = "0.2.86"
-
+# [tools]
+# wasm_bindgen = "0.2.88"
