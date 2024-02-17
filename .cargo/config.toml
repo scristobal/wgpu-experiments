@@ -1,9 +1,6 @@
-
-
-# in .vscode/settings.json "rust-analyzer.cargo.target": "wasm32-unknown-unknown"
-
-[build]
-target = "wasm32-unknown-unknown"
+# set default target to wasm
+# [build]
+# target = "wasm32-unknown-unknown"
 
 [target.wasm32-unknown-unknown]
 rustflags = ["--cfg=web_sys_unstable_apis"]

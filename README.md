@@ -38,3 +38,10 @@ serve the files with you favorite localserver, eg. [cargo-server](https://crates
 ```bash
 cargo server --open
 ```
+
+Note: the default target can also be specified in `.cargo/config.toml` as
+
+```toml
+[build]
+target = "wasm32-unknown-unknown"
+```
