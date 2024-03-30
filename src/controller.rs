@@ -5,7 +5,7 @@ use winit::{
 };
 
 #[derive(Debug)]
-pub struct CameraController {
+pub struct Controller {
     pub amount_left: f32,
     pub amount_right: f32,
     pub amount_forward: f32,
@@ -19,7 +19,7 @@ pub struct CameraController {
     pub sensitivity: f32,
 }
 
-impl CameraController {
+impl Controller {
     pub fn new(speed: f32, sensitivity: f32) -> Self {
         Self {
             amount_left: 0.0,

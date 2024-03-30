@@ -6,7 +6,7 @@ use winit::event::ElementState;
 use winit::event::*;
 use winit::keyboard::KeyCode;
 
-use crate::controller::CameraController;
+use crate::controller::Controller;
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
@@ -49,7 +49,7 @@ impl Camera {
         )
     }
 
-    pub fn update(&mut self, controller: &mut CameraController, dt: Duration) {
+    pub fn update(&mut self, controller: &mut Controller, dt: Duration) {
         let dt = dt.as_secs_f32();
 
         // Move forward/backward and left/right
