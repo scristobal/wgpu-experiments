@@ -1,4 +1,3 @@
-mod camera;
 mod controller;
 mod geometry;
 mod init;
@@ -7,6 +6,7 @@ mod light;
 mod model;
 mod resources;
 mod texture;
+mod view;
 
 use init::init;
 use light::UpdateBuffer;
@@ -24,10 +24,8 @@ struct State {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
 
-    view: camera::View,
+    view: view::View,
     controller: controller::Controller,
-    camera_buffer: wgpu::Buffer,
-    camera_bind_group: wgpu::BindGroup,
 
     light_controller: light::LightController,
     light_buffer: wgpu::Buffer,
@@ -47,42 +45,12 @@ impl State {
 
         /* Camera */
 
-        let view = camera::ViewBuilder::new()
+        let view = view::ViewBuilder::new()
             .set_camera((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0))
             .set_projection(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0)
-            .build();
+            .build(&device);
 
         let controller = controller::Controller::new(4.0, 0.4);
-
-        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&[view.as_uniform()]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let camera_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("camera_bind_group_layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
-
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("camera_bind_group"),
-            layout: &camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-        });
 
         /* Light */
 
@@ -120,7 +88,7 @@ impl State {
             let bind_groups_layout =
                 device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Light Pipeline Layout"),
-                    bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
+                    bind_group_layouts: &[&view.bind_group_layout, &light_bind_group_layout],
                     push_constant_ranges: &[],
                 });
 
@@ -287,7 +255,7 @@ impl State {
                     label: Some("Render Pipeline Layout"),
                     bind_group_layouts: &[
                         &texture_bind_group_layout, // group(0)
-                        &camera_bind_group_layout,  // group(1)
+                        &view.bind_group_layout,    // group(1)
                         &light_bind_group_layout,   // group(2)
                     ],
                     // render_pass.set_bind_group(0, &material.bind_group, &[]);
@@ -434,8 +402,6 @@ impl State {
             depth_texture,
             view,
             controller,
-            camera_bind_group,
-            camera_buffer,
             instance_buffer,
             num_instances,
             render_pipeline,
@@ -478,7 +444,7 @@ impl State {
 
         // writes camera position to the buffer
         self.queue.write_buffer(
-            &self.camera_buffer,
+            &self.view.buffer,
             0,
             bytemuck::cast_slice(&[self.view.as_uniform()]),
         );
@@ -530,7 +496,7 @@ impl State {
 
         render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
 
-        render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.view.bind_group, &[]);
         render_pass.set_bind_group(2, &self.light_bind_group, &[]);
 
         for mesh in &self.model.meshes {
@@ -547,7 +513,7 @@ impl State {
         for mesh in &self.model.meshes {
             render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
             render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(0, &self.view.bind_group, &[]);
             render_pass.set_bind_group(1, &self.light_bind_group, &[]);
             render_pass.draw_indexed(0..mesh.num_elements, 0, 0..1);
         }

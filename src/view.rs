@@ -1,10 +1,7 @@
 use cgmath::*;
 use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
-use winit::dpi::PhysicalPosition;
-use winit::event::ElementState;
-use winit::event::*;
-use winit::keyboard::KeyCode;
+use wgpu::util::DeviceExt;
 
 use crate::controller::Controller;
 
@@ -158,10 +155,47 @@ impl ViewBuilder {
         }
     }
 
-    pub fn build(self) -> View {
+    pub fn build(self, device: &wgpu::Device) -> View {
+        let uniform = ViewUniform::new(
+            self.camera.as_ref().unwrap(),
+            self.projection.as_ref().unwrap(),
+        );
+
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("View Buffer"),
+            contents: bytemuck::cast_slice(&[uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("View bind group layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("View bind group"),
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        });
+
         View {
             camera: self.camera.unwrap(),
             projection: self.projection.unwrap(),
+            buffer,
+            bind_group_layout,
+            bind_group,
         }
     }
 }
@@ -169,22 +203,49 @@ impl ViewBuilder {
 pub struct View {
     pub camera: Camera,
     pub projection: Projection,
+    pub buffer: wgpu::Buffer,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub bind_group: wgpu::BindGroup,
 }
 
 impl View {
-    pub fn as_uniform(&self) -> CameraUniform {
-        CameraUniform::new(&self.camera, &self.projection)
+    pub fn as_uniform(&self) -> ViewUniform {
+        ViewUniform::new(&self.camera, &self.projection)
     }
+
+    // let view_bind_group_layout =
+    //     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+    //         label: Some("View bind group layout"),
+    //         entries: &[wgpu::BindGroupLayoutEntry {
+    //             binding: 0,
+    //             visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+    //             ty: wgpu::BindingType::Buffer {
+    //                 ty: wgpu::BufferBindingType::Uniform,
+    //                 has_dynamic_offset: false,
+    //                 min_binding_size: None,
+    //             },
+    //             count: None,
+    //         }],
+    //     });
+
+    // let view_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+    //     label: Some("View bind group"),
+    //     layout: &view_bind_group_layout,
+    //     entries: &[wgpu::BindGroupEntry {
+    //         binding: 0,
+    //         resource: view_buffer.as_entire_binding(),
+    //     }],
+    // });
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct CameraUniform {
+pub struct ViewUniform {
     view_position: [f32; 4],
     view_proj: [[f32; 4]; 4],
 }
 
-impl CameraUniform {
+impl ViewUniform {
     fn new(camera: &Camera, projection: &Projection) -> Self {
         Self {
             view_position: camera.position.to_homogeneous().into(),
