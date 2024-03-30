@@ -123,12 +123,6 @@ pub struct ViewBuilder {
 }
 
 impl ViewBuilder {
-    pub fn new() -> Self {
-        Self {
-            camera: None,
-            projection: None,
-        }
-    }
     pub fn set_camera<V: Into<Point3<f32>>, Y: Into<Rad<f32>>, P: Into<Rad<f32>>>(
         self,
         position: V,
@@ -155,7 +149,7 @@ impl ViewBuilder {
         }
     }
 
-    pub fn build(self, device: &wgpu::Device) -> View {
+    pub fn finalize(self, device: &wgpu::Device) -> View {
         let uniform = ViewUniform::new(
             self.camera.as_ref().unwrap(),
             self.projection.as_ref().unwrap(),
@@ -209,6 +203,13 @@ pub struct View {
 }
 
 impl View {
+    pub fn build() -> ViewBuilder {
+        ViewBuilder {
+            camera: None,
+            projection: None,
+        }
+    }
+
     pub fn as_uniform(&self) -> ViewUniform {
         ViewUniform::new(&self.camera, &self.projection)
     }

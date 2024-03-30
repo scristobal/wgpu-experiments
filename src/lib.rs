@@ -43,12 +43,10 @@ impl State {
     async fn new(window: &Window) -> State {
         let (surface, device, queue, config) = init(window).await;
 
-        /* Camera */
-
-        let view = view::ViewBuilder::new()
+        let view = view::View::build()
             .set_camera((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0))
             .set_projection(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0)
-            .build(&device);
+            .finalize(&device);
 
         let controller = controller::Controller::new(4.0, 0.4);
 
