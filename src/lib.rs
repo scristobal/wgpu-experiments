@@ -1,11 +1,11 @@
 mod controller;
 mod geometry;
 mod init;
-mod instances;
 mod light;
 mod model;
 mod resources;
 mod texture;
+mod transforms;
 mod view;
 
 use init::init;
@@ -32,7 +32,7 @@ struct State {
 
     depth_texture: texture::Texture,
 
-    instances: instances::Instances,
+    instances: transforms::Transforms,
 }
 
 impl State {
@@ -158,8 +158,8 @@ impl State {
             .await
             .unwrap();
 
-        let instances = instances::Instances::build()
-            .from_transform_field(3, 3)
+        let instances = transforms::Transforms::build()
+            .transform_field(3, 3)
             .finalize(&device);
 
         let model_render_pipeline = {
@@ -211,7 +211,7 @@ impl State {
             };
 
             let instances_layout = wgpu::VertexBufferLayout {
-                array_stride: mem::size_of::<instances::RawInstance>() as wgpu::BufferAddress,
+                array_stride: mem::size_of::<transforms::FlatTransform>() as wgpu::BufferAddress,
                 step_mode: wgpu::VertexStepMode::Instance,
                 attributes: &[
                     wgpu::VertexAttribute {

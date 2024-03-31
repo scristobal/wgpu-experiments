@@ -48,7 +48,7 @@ impl<P, C, L> LightBuilder<P, C, L> {
 
 impl LightBuilder<Point3<f32>, [f32; 3], Controller> {
     pub fn finalize(self, device: &wgpu::Device) -> Light {
-        let uniform = LightUniform {
+        let uniform = FlatLight {
             position: self.position.into(),
             _padding: 0,
             color: self.color,
@@ -115,11 +115,11 @@ impl Light {
             ) * old_position,
         );
 
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.as_uniform()]));
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.flattened()]));
     }
 
-    fn as_uniform(&self) -> LightUniform {
-        LightUniform {
+    fn flattened(&self) -> FlatLight {
+        FlatLight {
             position: self.position.into(),
             _padding: 0,
             color: self.color,
@@ -130,7 +130,7 @@ impl Light {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct LightUniform {
+struct FlatLight {
     pub position: [f32; 3],
     // Due to uniforms requiring 16 byte (4 float) spacing, we need to use a padding field here
     pub _padding: u32, // could use [f32;4] instead

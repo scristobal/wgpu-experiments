@@ -1,9 +1,10 @@
 use cgmath::prelude::*;
+use instant::Duration;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct RawInstance {
+pub struct FlatTransform {
     model_transform: [[f32; 4]; 4],
     normal_transform: [[f32; 3]; 3],
 }
@@ -15,19 +16,19 @@ pub struct Transform {
 }
 
 impl Transform {
-    pub fn to_raw(&self) -> RawInstance {
+    fn fattened(&self) -> FlatTransform {
         let model = cgmath::Matrix4::from_translation(self.translation)
             * cgmath::Matrix4::from(self.rotation)
             * cgmath::Matrix4::from_scale(self.scale);
 
-        RawInstance {
+        FlatTransform {
             model_transform: model.into(),
             normal_transform: cgmath::Matrix3::from(self.rotation).into(),
         }
     }
 }
 
-pub fn sample_transform_field(rows: u32, cols: u32) -> Vec<Transform> {
+pub fn generate_transforms(rows: u32, cols: u32) -> Vec<Transform> {
     const SPACE_BETWEEN: f32 = 4.0;
     (0..rows)
         .flat_map(|z| {
@@ -55,50 +56,58 @@ pub fn sample_transform_field(rows: u32, cols: u32) -> Vec<Transform> {
         .collect::<Vec<_>>()
 }
 
-pub struct Instances {
+pub struct Transforms {
     pub transforms: Vec<Transform>,
     pub buffer: wgpu::Buffer,
     pub number: u32,
 }
 
-pub struct InstancesBuilder<T> {
+pub struct TransformsBuilder<T> {
     transforms: T,
 }
 
-impl<T> InstancesBuilder<T> {
-    pub fn from_transform_field(self, n: u32, m: u32) -> InstancesBuilder<Vec<Transform>> {
-        let transforms = sample_transform_field(n, m);
+impl<T> TransformsBuilder<T> {
+    pub fn transform_field(self, n: u32, m: u32) -> TransformsBuilder<Vec<Transform>> {
+        let transforms = generate_transforms(n, m);
 
-        InstancesBuilder { transforms }
+        TransformsBuilder { transforms }
     }
 }
 
-impl InstancesBuilder<Vec<Transform>> {
-    pub fn finalize(self, device: &wgpu::Device) -> Instances {
-        let instances = self
+impl TransformsBuilder<Vec<Transform>> {
+    pub fn finalize(self, device: &wgpu::Device) -> Transforms {
+        let transforms = self
             .transforms
             .iter()
-            .map(Transform::to_raw)
+            .map(Transform::fattened)
             .collect::<Vec<_>>();
 
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("instance_buffer"),
-            contents: bytemuck::cast_slice(&instances),
+            contents: bytemuck::cast_slice(&transforms),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let num_instances = instances.len() as u32;
+        let number = self.transforms.len() as u32;
 
-        Instances {
+        Transforms {
             transforms: self.transforms,
-            buffer: instance_buffer,
-            number: num_instances,
+            buffer,
+            number,
         }
     }
 }
 
-impl Instances {
-    pub fn build() -> InstancesBuilder<Option<Vec<Transform>>> {
-        InstancesBuilder { transforms: None }
+impl Transforms {
+    pub fn build() -> TransformsBuilder<Option<Vec<Transform>>> {
+        TransformsBuilder { transforms: None }
+    }
+
+    pub fn update(&mut self, _dt: Duration, queue: &wgpu::Queue) {
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&self.flattened()));
+    }
+
+    fn flattened(&self) -> Vec<FlatTransform> {
+        self.transforms.iter().map(Transform::fattened).collect()
     }
 }

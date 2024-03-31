@@ -163,7 +163,7 @@ impl<C, P, L> ViewBuilder<C, P, L> {
 
 impl ViewBuilder<Camera, Projection, Controller> {
     pub fn finalize(self, device: &wgpu::Device) -> View {
-        let uniform = ViewUniform::new(&self.camera, &self.projection);
+        let uniform = FlatView::new(&self.camera, &self.projection);
 
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("View Buffer"),
@@ -226,22 +226,22 @@ impl View {
     pub fn update(&mut self, dt: Duration, queue: &wgpu::Queue) {
         self.camera.update(&mut self.controller, dt);
 
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.as_uniform()]));
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.flattened()]));
     }
 
-    fn as_uniform(&self) -> ViewUniform {
-        ViewUniform::new(&self.camera, &self.projection)
+    fn flattened(&self) -> FlatView {
+        FlatView::new(&self.camera, &self.projection)
     }
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct ViewUniform {
+pub struct FlatView {
     view_position: [f32; 4],
     view_proj: [[f32; 4]; 4],
 }
 
-impl ViewUniform {
+impl FlatView {
     fn new(camera: &Camera, projection: &Projection) -> Self {
         Self {
             view_position: camera.position.to_homogeneous().into(),
