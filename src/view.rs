@@ -117,43 +117,42 @@ impl Projection {
     }
 }
 
-pub struct ViewBuilder {
-    camera: Option<Camera>,
-    projection: Option<Projection>,
+pub struct ViewBuilder<C, P> {
+    camera: C,
+    projection: P,
 }
 
-impl ViewBuilder {
-    pub fn set_camera<V: Into<Point3<f32>>, Y: Into<Rad<f32>>, P: Into<Rad<f32>>>(
+impl<C, P> ViewBuilder<C, P> {
+    pub fn camera<V: Into<Point3<f32>>, Y: Into<Rad<f32>>, Pt: Into<Rad<f32>>>(
         self,
         position: V,
         yaw: Y,
-        pitch: P,
-    ) -> Self {
-        Self {
-            camera: Some(Camera::new(position, yaw, pitch)),
-            ..self
+        pitch: Pt,
+    ) -> ViewBuilder<Camera, P> {
+        ViewBuilder {
+            camera: Camera::new(position, yaw, pitch),
+            projection: self.projection,
         }
     }
 
-    pub fn set_projection<F: Into<Rad<f32>>>(
+    pub fn projection<F: Into<Rad<f32>>>(
         self,
         width: u32,
         height: u32,
         fovy: F,
         znear: f32,
         zfar: f32,
-    ) -> Self {
-        Self {
-            projection: Some(Projection::new(width, height, fovy, znear, zfar)),
-            ..self
+    ) -> ViewBuilder<C, Projection> {
+        ViewBuilder {
+            projection: Projection::new(width, height, fovy, znear, zfar),
+            camera: self.camera,
         }
     }
+}
 
+impl ViewBuilder<Camera, Projection> {
     pub fn finalize(self, device: &wgpu::Device) -> View {
-        let uniform = ViewUniform::new(
-            self.camera.as_ref().unwrap(),
-            self.projection.as_ref().unwrap(),
-        );
+        let uniform = ViewUniform::new(&self.camera, &self.projection);
 
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("View Buffer"),
@@ -185,8 +184,8 @@ impl ViewBuilder {
         });
 
         View {
-            camera: self.camera.unwrap(),
-            projection: self.projection.unwrap(),
+            camera: self.camera,
+            projection: self.projection,
             buffer,
             bind_group_layout,
             bind_group,
@@ -203,7 +202,7 @@ pub struct View {
 }
 
 impl View {
-    pub fn build() -> ViewBuilder {
+    pub fn build() -> ViewBuilder<Option<Camera>, Option<Projection>> {
         ViewBuilder {
             camera: None,
             projection: None,
