@@ -117,21 +117,23 @@ impl Projection {
     }
 }
 
-pub struct ViewBuilder<C, P> {
+pub struct ViewBuilder<C, P, L> {
     camera: C,
     projection: P,
+    controller: L,
 }
 
-impl<C, P> ViewBuilder<C, P> {
+impl<C, P, L> ViewBuilder<C, P, L> {
     pub fn camera<V: Into<Point3<f32>>, Y: Into<Rad<f32>>, Pt: Into<Rad<f32>>>(
         self,
         position: V,
         yaw: Y,
         pitch: Pt,
-    ) -> ViewBuilder<Camera, P> {
+    ) -> ViewBuilder<Camera, P, L> {
         ViewBuilder {
             camera: Camera::new(position, yaw, pitch),
             projection: self.projection,
+            controller: self.controller,
         }
     }
 
@@ -142,15 +144,24 @@ impl<C, P> ViewBuilder<C, P> {
         fovy: F,
         znear: f32,
         zfar: f32,
-    ) -> ViewBuilder<C, Projection> {
+    ) -> ViewBuilder<C, Projection, L> {
         ViewBuilder {
             projection: Projection::new(width, height, fovy, znear, zfar),
             camera: self.camera,
+            controller: self.controller,
+        }
+    }
+
+    pub fn controller(self, controller: Controller) -> ViewBuilder<C, P, Controller> {
+        ViewBuilder {
+            controller,
+            camera: self.camera,
+            projection: self.projection,
         }
     }
 }
 
-impl ViewBuilder<Camera, Projection> {
+impl ViewBuilder<Camera, Projection, Controller> {
     pub fn finalize(self, device: &wgpu::Device) -> View {
         let uniform = ViewUniform::new(&self.camera, &self.projection);
 
@@ -186,6 +197,7 @@ impl ViewBuilder<Camera, Projection> {
         View {
             camera: self.camera,
             projection: self.projection,
+            controller: self.controller,
             buffer,
             bind_group_layout,
             bind_group,
@@ -196,17 +208,25 @@ impl ViewBuilder<Camera, Projection> {
 pub struct View {
     pub camera: Camera,
     pub projection: Projection,
+    pub controller: Controller,
     pub buffer: wgpu::Buffer,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub bind_group: wgpu::BindGroup,
 }
 
 impl View {
-    pub fn build() -> ViewBuilder<Option<Camera>, Option<Projection>> {
+    pub fn build() -> ViewBuilder<Option<Camera>, Option<Projection>, Option<Controller>> {
         ViewBuilder {
             camera: None,
             projection: None,
+            controller: None,
         }
+    }
+
+    pub fn update(&mut self, dt: Duration, queue: &wgpu::Queue) {
+        self.camera.update(&mut self.controller, dt);
+
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.as_uniform()]));
     }
 
     pub fn as_uniform(&self) -> ViewUniform {

@@ -25,7 +25,6 @@ struct State {
     config: wgpu::SurfaceConfiguration,
 
     view: view::View,
-    controller: controller::Controller,
 
     light_controller: light::LightController,
     light_buffer: wgpu::Buffer,
@@ -46,9 +45,8 @@ impl State {
         let view = view::View::build()
             .camera((0.0, 5.0, 10.0), cgmath::Deg(-90.0), cgmath::Deg(-20.0))
             .projection(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0)
+            .controller(controller::Controller::new(4.0, 0.4))
             .finalize(&device);
-
-        let controller = controller::Controller::new(4.0, 0.4);
 
         /* Light */
 
@@ -399,7 +397,6 @@ impl State {
             config,
             depth_texture,
             view,
-            controller,
             instance_buffer,
             num_instances,
             render_pipeline,
@@ -438,14 +435,7 @@ impl State {
 
     fn update(&mut self, dt: instant::Duration) {
         // updates camera position
-        self.view.camera.update(&mut self.controller, dt);
-
-        // writes camera position to the buffer
-        self.queue.write_buffer(
-            &self.view.buffer,
-            0,
-            bytemuck::cast_slice(&[self.view.as_uniform()]),
-        );
+        self.view.update(dt, &self.queue);
 
         // updates light position
         self.light_controller.update(dt);
@@ -543,7 +533,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             Event::DeviceEvent {
                 event: DeviceEvent::MouseMotion { delta },
                 ..
-            } => state.controller.process_mouse(delta.0, delta.1),
+            } => state.view.controller.process_mouse(delta.0, delta.1),
             Event::WindowEvent { ref event, .. } => match event {
                 WindowEvent::CloseRequested => elwt.exit(),
                 WindowEvent::KeyboardInput {
@@ -569,8 +559,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                             ..
                         },
                     ..
-                } => state.controller.process_keyboard(*key, *keyboard_state),
-                WindowEvent::MouseWheel { delta, .. } => state.controller.process_scroll(delta),
+                } => state
+                    .view
+                    .controller
+                    .process_keyboard(*key, *keyboard_state),
+                WindowEvent::MouseWheel { delta, .. } => {
+                    state.view.controller.process_scroll(delta)
+                }
 
                 WindowEvent::RedrawRequested => {
                     let now = instant::Instant::now();
