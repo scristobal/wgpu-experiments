@@ -229,33 +229,9 @@ impl View {
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.as_uniform()]));
     }
 
-    pub fn as_uniform(&self) -> ViewUniform {
+    fn as_uniform(&self) -> ViewUniform {
         ViewUniform::new(&self.camera, &self.projection)
     }
-
-    // let view_bind_group_layout =
-    //     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-    //         label: Some("View bind group layout"),
-    //         entries: &[wgpu::BindGroupLayoutEntry {
-    //             binding: 0,
-    //             visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-    //             ty: wgpu::BindingType::Buffer {
-    //                 ty: wgpu::BufferBindingType::Uniform,
-    //                 has_dynamic_offset: false,
-    //                 min_binding_size: None,
-    //             },
-    //             count: None,
-    //         }],
-    //     });
-
-    // let view_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-    //     label: Some("View bind group"),
-    //     layout: &view_bind_group_layout,
-    //     entries: &[wgpu::BindGroupEntry {
-    //         binding: 0,
-    //         resource: view_buffer.as_entire_binding(),
-    //     }],
-    // });
 }
 
 #[repr(C)]

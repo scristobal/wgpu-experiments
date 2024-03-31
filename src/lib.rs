@@ -547,9 +547,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 } => elwt.exit(),
                 WindowEvent::Resized(physical_size) => {
                     cfg_if::cfg_if! {
-                    if #[cfg(not(target_arch = "wasm32"))]{
-                        state.resize(*physical_size)
-                    }}
+                        if #[cfg(not(target_arch = "wasm32"))]{
+                            state.resize(*physical_size)
+                        }
+                    }
                 }
                 WindowEvent::KeyboardInput {
                     event:
