@@ -28,6 +28,7 @@ pub struct Material {
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
+    pub materials_layout: wgpu::BindGroupLayout,
 }
 
 impl Material {

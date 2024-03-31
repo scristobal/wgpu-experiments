@@ -1,4 +1,5 @@
 use cgmath::prelude::*;
+use wgpu::util::DeviceExt;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -52,4 +53,52 @@ pub fn sample_transform_field(rows: u32, cols: u32) -> Vec<Transform> {
             })
         })
         .collect::<Vec<_>>()
+}
+
+pub struct Instances {
+    pub transforms: Vec<Transform>,
+    pub buffer: wgpu::Buffer,
+    pub number: u32,
+}
+
+pub struct InstancesBuilder<T> {
+    transforms: T,
+}
+
+impl<T> InstancesBuilder<T> {
+    pub fn from_transform_field(self, n: u32, m: u32) -> InstancesBuilder<Vec<Transform>> {
+        let transforms = sample_transform_field(n, m);
+
+        InstancesBuilder { transforms }
+    }
+}
+
+impl InstancesBuilder<Vec<Transform>> {
+    pub fn finalize(self, device: &wgpu::Device) -> Instances {
+        let instances = self
+            .transforms
+            .iter()
+            .map(Transform::to_raw)
+            .collect::<Vec<_>>();
+
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("instance_buffer"),
+            contents: bytemuck::cast_slice(&instances),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let num_instances = instances.len() as u32;
+
+        Instances {
+            transforms: self.transforms,
+            buffer: instance_buffer,
+            number: num_instances,
+        }
+    }
+}
+
+impl Instances {
+    pub fn build() -> InstancesBuilder<Option<Vec<Transform>>> {
+        InstancesBuilder { transforms: None }
+    }
 }

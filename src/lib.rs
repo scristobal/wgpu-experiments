@@ -9,9 +9,7 @@ mod texture;
 mod view;
 
 use init::init;
-use light::UpdateBuffer;
 use std::mem;
-use wgpu::util::DeviceExt;
 use winit::keyboard::{Key, NamedKey, PhysicalKey};
 use winit::{event::*, event_loop::EventLoop, window::Window};
 
@@ -26,16 +24,15 @@ struct State {
 
     view: view::View,
 
-    light_controller: light::LightController,
-    light_buffer: wgpu::Buffer,
-    light_bind_group: wgpu::BindGroup,
+    light: light::Light,
     light_render_pipeline: wgpu::RenderPipeline,
 
     model: model::Model,
-    instance_buffer: wgpu::Buffer,
-    num_instances: u32,
+    model_render_pipeline: wgpu::RenderPipeline,
+
     depth_texture: texture::Texture,
-    render_pipeline: wgpu::RenderPipeline,
+
+    instances: instances::Instances,
 }
 
 impl State {
@@ -48,43 +45,17 @@ impl State {
             .controller(controller::Controller::new(4.0, 0.4))
             .finalize(&device);
 
-        /* Light */
-
-        let light = light::Light::new([4.0, 4.0, 2.0], [1.0, 1.0, 1.0]);
-
-        let light_buffer = light::LightBuffer::new(&device, &light);
-
-        let light_controller = light::LightController::new(60.0, light);
-
-        let light_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: None,
-            });
-
-        let light_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &light_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: light_buffer.buffer.as_entire_binding(),
-            }],
-            label: None,
-        });
+        let light = light::Light::build()
+            .position([4.0, 4.0, 2.0])
+            .color([1.0, 1.0, 1.0])
+            .controller(60.0)
+            .finalize(&device);
 
         let light_render_pipeline = {
             let bind_groups_layout =
                 device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Light Pipeline Layout"),
-                    bind_group_layouts: &[&view.bind_group_layout, &light_bind_group_layout],
+                    bind_group_layouts: &[&view.bind_group_layout, &light.bind_group_layout],
                     push_constant_ranges: &[],
                 });
 
@@ -176,49 +147,6 @@ impl State {
             })
         };
 
-        /* Geometry */
-
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("texture_bind_group_layout"),
-                entries: &[
-                    // diffuse map
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                    // normal map
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
-
         let depth_texture = texture::Texture::create_depth_texture(
             &device,
             config.width,
@@ -226,33 +154,23 @@ impl State {
             "depth_texture",
         );
 
-        let model = resources::load_model("cube.obj", &device, &queue, &texture_bind_group_layout)
+        let model = resources::load_model("cube.obj", &device, &queue)
             .await
             .unwrap();
 
-        let transforms = instances::sample_transform_field(3, 3);
+        let instances = instances::Instances::build()
+            .from_transform_field(3, 3)
+            .finalize(&device);
 
-        let instance_data = transforms
-            .iter()
-            .map(instances::Transform::to_raw)
-            .collect::<Vec<_>>();
-
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("instance_buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let num_instances = transforms.len() as u32;
-
-        let render_pipeline = {
+        let model_render_pipeline = {
             let render_pipeline_layout =
                 device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Layout"),
                     bind_group_layouts: &[
-                        &texture_bind_group_layout, // group(0)
-                        &view.bind_group_layout,    // group(1)
-                        &light_bind_group_layout,   // group(2)
+                        // FIXME: all materials must have the same layout
+                        &model.materials_layout,  // group(0)
+                        &view.bind_group_layout,  // group(1)
+                        &light.bind_group_layout, // group(2)
                     ],
                     // render_pass.set_bind_group(0, &material.bind_group, &[]);
                     // render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
@@ -397,13 +315,10 @@ impl State {
             config,
             depth_texture,
             view,
-            instance_buffer,
-            num_instances,
-            render_pipeline,
+            instances,
+            model_render_pipeline,
             model,
-            light_controller,
-            light_buffer: light_buffer.buffer,
-            light_bind_group,
+            light,
             light_render_pipeline,
         }
     }
@@ -434,15 +349,9 @@ impl State {
     }
 
     fn update(&mut self, dt: instant::Duration) {
-        // updates camera position
+        // also update the buffer and adds it to the queue
         self.view.update(dt, &self.queue);
-
-        // updates light position
-        self.light_controller.update(dt);
-
-        self.light_controller
-            .light
-            .update(&self.queue, &self.light_buffer);
+        self.light.update(dt, &self.queue);
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -480,12 +389,12 @@ impl State {
             occlusion_query_set: None,
         });
 
-        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_pipeline(&self.model_render_pipeline);
 
-        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, self.instances.buffer.slice(..));
 
         render_pass.set_bind_group(1, &self.view.bind_group, &[]);
-        render_pass.set_bind_group(2, &self.light_bind_group, &[]);
+        render_pass.set_bind_group(2, &self.light.bind_group, &[]);
 
         for mesh in &self.model.meshes {
             let material = &self.model.materials[mesh.material];
@@ -494,7 +403,7 @@ impl State {
             render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.set_bind_group(0, &material.bind_group, &[]);
 
-            render_pass.draw_indexed(0..mesh.num_elements, 0, 0..self.num_instances);
+            render_pass.draw_indexed(0..mesh.num_elements, 0, 0..self.instances.number);
         }
 
         render_pass.set_pipeline(&self.light_render_pipeline);
@@ -502,7 +411,7 @@ impl State {
             render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
             render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.set_bind_group(0, &self.view.bind_group, &[]);
-            render_pass.set_bind_group(1, &self.light_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.light.bind_group, &[]);
             render_pass.draw_indexed(0..mesh.num_elements, 0, 0..1);
         }
 
