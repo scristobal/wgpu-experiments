@@ -167,7 +167,6 @@ impl State {
                 device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Layout"),
                     bind_group_layouts: &[
-                        // FIXME: all materials must have the same layout
                         &model.materials_layout,  // group(0)
                         &view.bind_group_layout,  // group(1)
                         &light.bind_group_layout, // group(2)
