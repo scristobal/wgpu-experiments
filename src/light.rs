@@ -1,8 +1,10 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, mem};
 
 use cgmath::*;
 use instant::Duration;
 use wgpu::util::DeviceExt;
+
+use crate::texture;
 
 pub struct Light {
     pub position: Point3<f32>,
