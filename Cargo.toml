@@ -9,35 +9,35 @@ edition = "2021"
 crate-type = ["rlib"]
 
 [build-dependencies]
-anyhow = "1.0"
-fs_extra = "1.3"
-glob = "0.3"
+anyhow = "1.0.82"
+fs_extra = "1.3.0"
+glob = "0.3.1"
 
 [dependencies]
 cfg-if = "1.0"
 winit = { version = "0.29", features = ["rwh_05"] }
 wgpu = "0.18"
-env_logger = "0.10"
-log = "0.4"
-pollster = "0.3"
-bytemuck = { version = "1.14", features = ["derive"] }
-image = { version = "0.24", default-features = false, features = [
+env_logger = "0.11.3"
+log = "0.4.21"
+pollster = "0.3.0"
+bytemuck = { version = "1.15.0", features = ["derive"] }
+image = { version = "0.25.1", default-features = false, features = [
     "png",
     "jpeg",
 ] }
-anyhow = "1.0"
-cgmath = "0.18"
-tobj = { version = "4.0", features = ["async"] }
-instant = { version = "0.1", features = ["wasm-bindgen"] }
+anyhow = "1.0.82"
+cgmath = "0.18.0"
+tobj = { version = "4.0.2", features = ["async"] }
+instant = { version = "0.1.12", features = ["wasm-bindgen"] }
 
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-console_error_panic_hook = "0.1"
-console_log = "1.0"
-wasm-bindgen = "0.2.88"
-wasm-bindgen-futures = "0.4"
-reqwest = { version = "0.11" }
-getrandom = { version = "0.2", features = ["js"] }
+console_error_panic_hook = "0.1.7"
+console_log = "1.0.0"
+wasm-bindgen = "0.2.92"
+wasm-bindgen-futures = "0.4.42"
+reqwest = { version = "0.12.4" }
+getrandom = { version = "0.2.14", features = ["js"] }
 web-sys = { version = "0.3", features = [
     "Document",
     "Window",
